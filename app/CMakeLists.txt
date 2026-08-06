@@ -118,8 +118,10 @@ endif()
 
 set(REPO_RESOURCES_DIR "${APP_ROOT}/../resources")
 
-# Dev convenience: copy models + branding resources next to binary
+# Dev convenience: copy models + branding resources next to binary.
+# app/models/ may be empty in CI (*.pkl gitignored); create it so copy_directory succeeds.
 add_custom_command(TARGET demucs_mlx_app POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_ROOT}/models"
   COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:demucs_mlx_app>/models"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           "${APP_ROOT}/models" "$<TARGET_FILE_DIR:demucs_mlx_app>/models"
