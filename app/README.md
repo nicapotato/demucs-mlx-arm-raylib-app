@@ -59,7 +59,9 @@ Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the fir
 Large binaries are **not** published to S3. Releases go to:
 
 1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` channel via butler)
-2. **GitHub Release assets** — zip + sha256 on tag `v*`
+2. **GitHub Release assets** — zip + sha256 on a `v*` tag created by the release workflow
+
+Both [ci.yml](../.github/workflows/ci.yml) and [release.yml](../.github/workflows/release.yml) are **workflow_dispatch only** (no push/PR/tag triggers).
 
 ### One-time repo secrets
 
@@ -73,15 +75,29 @@ PSARC support uses checked-in arm64 static libs under [`app/external/rocksmith-p
 bash app/scripts/refresh_rocksmith_prebuilt.sh
 ```
 
+### Run CI
+
+From repo root (branch must be pushed):
+
+```bash
+make ci          # or: make ci-watch
+```
+
+Or Actions → **ci** → Run workflow.
+
 ### Ship a release
 
 1. Bump `VERSION=` in [`project.conf`](../project.conf)
 2. Commit + push to `main`
-3. Either:
-   - `git tag v0.1.0 && git push origin v0.1.0` (runs [release.yml](../.github/workflows/release.yml)), or
-   - Actions → **release** → Run workflow (optional version override / publish toggles)
+3. From repo root:
 
-CI on every PR/push to `main`: [ci.yml](../.github/workflows/ci.yml) (Python lint/tests + GUI cmake build smoke).
+```bash
+make release              # or: make release-watch
+make release VERSION=0.1.1
+make release PUBLISH_ITCH=true PUBLISH_GH_RELEASE=false
+```
+
+Or Actions → **release** → Run workflow.
 
 ## Rocknroller layout
 

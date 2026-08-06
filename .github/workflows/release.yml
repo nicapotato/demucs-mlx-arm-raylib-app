@@ -1,9 +1,6 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -47,10 +44,8 @@ jobs:
           INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${INPUT_VERSION}" ]; then
+          if [ -n "${INPUT_VERSION}" ]; then
             V="${INPUT_VERSION}"
-          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            V="${GITHUB_REF_NAME#v}"
           else
             V=$(grep '^VERSION=' project.conf | cut -d= -f2 | tr -d '[:space:]')
           fi
@@ -168,17 +163,13 @@ jobs:
           if-no-files-found: error
 
       - name: Setup butler
-        if: >-
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_itch == 'true')
+        if: github.event.inputs.publish_itch == 'true'
         uses: remarkablegames/setup-butler@v2
         with:
           butler-version: LATEST
 
       - name: Push to itch.io
-        if: >-
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_itch == 'true')
+        if: github.event.inputs.publish_itch == 'true'
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
@@ -192,8 +183,8 @@ jobs:
             --userversion "${VERSION}"
           echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
 
-      - name: Guard duplicate tag (workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_gh_release == 'true'
+      - name: Guard duplicate tag
+        if: github.event.inputs.publish_gh_release == 'true'
         run: |
           set -euo pipefail
           git fetch --tags origin
@@ -204,9 +195,7 @@ jobs:
           echo "Tag ${TAG} is available"
 
       - name: Create GitHub Release
-        if: >-
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_gh_release == 'true')
+        if: github.event.inputs.publish_gh_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
