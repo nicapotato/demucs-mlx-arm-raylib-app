@@ -1,0 +1,261 @@
+#include "app_state.h"
+
+#include "psarc_input.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+typedef struct {
+  DmxApp *app;
+  int job_index;
+} DmxWorkerArgs;
+
+static int is_supported_path(const char *path) {
+  const char *dot = strrchr(path, '.');
+  if (!dot) {
+    return 0;
+  }
+  static const char *exts[] = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aiff", ".aif", ".psarc", NULL};
+  for (int i = 0; exts[i]; ++i) {
+    const char *a = dot;
+    const char *b = exts[i];
+    int ok = 1;
+    while (*a && *b) {
+      char ca = *a;
+      char cb = *b;
+      if (ca >= 'A' && ca <= 'Z') {
+        ca = (char)(ca - 'A' + 'a');
+      }
+      if (ca != cb) {
+        ok = 0;
+        break;
+      }
+      ++a;
+      ++b;
+    }
+    if (ok && *a == '\0' && *b == '\0') {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void dmx_app_init(DmxApp *app) {
+  memset(app, 0, sizeof *app);
+  dmx_queue_init(&app->queue);
+  dmx_worker_config_defaults(&app->worker_cfg);
+  dmx_worker_live_reset(&app->live);
+  app->model_index = 0;
+  app->write_mp3 = 1;
+
+  const char *home = getenv("HOME");
+  if (home) {
+    snprintf(app->output_dir, sizeof app->output_dir, "%s/Documents/psarc/stems", home);
+  } else {
+    snprintf(app->output_dir, sizeof app->output_dir, "./stems");
+  }
+
+  char err[512];
+  if (dmx_worker_resolve(&app->worker_cfg, err, sizeof err) != 0) {
+    snprintf(app->status_line, sizeof app->status_line, "%s", err);
+  } else {
+    snprintf(app->status_line, sizeof app->status_line, "Ready - drop audio or PSARC files");
+  }
+  dmx_app_apply_settings(app);
+}
+
+static Image dmx_load_image_branding(const char *name) {
+  Image img = LoadImage(name);
+  if (img.data == NULL) {
+    img = LoadImage(TextFormat("%sresources/%s", GetApplicationDirectory(), name));
+  }
+  if (img.data == NULL) {
+    img = LoadImage(TextFormat("resources/%s", name));
+  }
+  return img;
+}
+
+void dmx_app_load_branding(DmxApp *app) {
+  if (!app) {
+    return;
+  }
+
+  Image logo = dmx_load_image_branding("demuc-mlx-app-logo-export-1000.png");
+  if (logo.data != NULL) {
+    app->logo_tex = LoadTextureFromImage(logo);
+    SetTextureFilter(app->logo_tex, TEXTURE_FILTER_POINT);
+    app->logo_loaded = 1;
+    UnloadImage(logo);
+  }
+
+  Image win_icon = dmx_load_image_branding("demucs-mlx-app-initials.png");
+  if (win_icon.data != NULL) {
+    SetWindowIcon(win_icon);
+    UnloadImage(win_icon);
+  }
+}
+
+void dmx_app_shutdown(DmxApp *app) {
+  if (!app) {
+    return;
+  }
+  if (app->live.running) {
+    dmx_worker_request_cancel(&app->live);
+  }
+  if (app->worker_thread) {
+    dmx_thread_join(app->worker_thread);
+    app->worker_thread = NULL;
+  }
+  if (app->logo_loaded) {
+    UnloadTexture(app->logo_tex);
+    app->logo_loaded = 0;
+  }
+}
+
+void dmx_app_apply_settings(DmxApp *app) {
+  if (app->model_index == 0) {
+    snprintf(app->worker_cfg.model_name, sizeof app->worker_cfg.model_name, "htdemucs_6s");
+  } else {
+    snprintf(app->worker_cfg.model_name, sizeof app->worker_cfg.model_name, "htdemucs");
+  }
+  app->worker_cfg.write_mp3 = app->write_mp3;
+}
+
+void dmx_app_add_path(DmxApp *app, const char *path) {
+  if (!app || !path || !path[0]) {
+    return;
+  }
+  if (!is_supported_path(path)) {
+    snprintf(app->status_line, sizeof app->status_line, "Unsupported: %s", path);
+    return;
+  }
+  if (dmx_queue_add(&app->queue, path) != 0) {
+    snprintf(app->status_line, sizeof app->status_line, "Queue full");
+    return;
+  }
+  snprintf(app->status_line, sizeof app->status_line, "Added %s", path);
+}
+
+void dmx_app_request_cancel(DmxApp *app) {
+  app->cancel_pressed = 1;
+  dmx_worker_request_cancel(&app->live);
+}
+
+static void cleanup_temp(DmxJob *job) {
+  if (job && job->owns_temp_audio && job->prepared_audio[0]) {
+    unlink(job->prepared_audio);
+    job->prepared_audio[0] = '\0';
+    job->owns_temp_audio = 0;
+  }
+}
+
+static void *worker_thread_main(void *arg) {
+  DmxWorkerArgs *wa = (DmxWorkerArgs *)arg;
+  DmxApp *app = wa->app;
+  DmxJob *job = &app->queue.jobs[wa->job_index];
+
+  snprintf(job->out_dir, sizeof job->out_dir, "%s", app->output_dir);
+  job->status = DMX_JOB_PREPARING;
+  snprintf(job->message, sizeof job->message, "Preparing...");
+  snprintf(app->live.status_msg, sizeof app->live.status_msg, "Preparing...");
+
+  if (job->is_psarc) {
+    char *errmsg = NULL;
+    if (dmx_psarc_extract_audio(job->input_path, job->prepared_audio, sizeof job->prepared_audio, &errmsg) !=
+        0) {
+      job->status = DMX_JOB_ERROR;
+      snprintf(job->message, sizeof job->message, "%s", errmsg ? errmsg : "psarc extract failed");
+      snprintf(app->live.error_msg, sizeof app->live.error_msg, "%s", job->message);
+      free(errmsg);
+      app->live.done = 1;
+      app->live.running = 0;
+      free(wa);
+      return NULL;
+    }
+    job->owns_temp_audio = 1;
+    free(errmsg);
+  } else {
+    snprintf(job->prepared_audio, sizeof job->prepared_audio, "%s", job->input_path);
+    job->owns_temp_audio = 0;
+  }
+
+  if (app->live.cancel_requested) {
+    job->status = DMX_JOB_CANCELLED;
+    snprintf(job->message, sizeof job->message, "Cancelled");
+    cleanup_temp(job);
+    app->live.done = 1;
+    app->live.running = 0;
+    free(wa);
+    return NULL;
+  }
+
+  job->status = DMX_JOB_RUNNING;
+  snprintf(job->message, sizeof job->message, "Running...");
+  dmx_worker_run_job(&app->worker_cfg, job, &app->live);
+
+  if (app->live.cancel_requested) {
+    job->status = DMX_JOB_CANCELLED;
+    snprintf(job->message, sizeof job->message, "Cancelled");
+  } else if (app->live.exit_code == 0) {
+    job->status = DMX_JOB_DONE;
+    job->progress_pct = 100.0f;
+    snprintf(job->message, sizeof job->message, "Wrote stems to %s/%s", job->out_dir, job->track_name);
+  } else {
+    job->status = DMX_JOB_ERROR;
+    snprintf(job->message, sizeof job->message, "%s",
+             app->live.error_msg[0] ? app->live.error_msg : "Worker failed");
+  }
+
+  cleanup_temp(job);
+  free(wa);
+  return NULL;
+}
+
+void dmx_app_tick(DmxApp *app) {
+  dmx_app_apply_settings(app);
+
+  /* Sync live progress into active job */
+  if (app->queue.active_index >= 0 && app->queue.active_index < app->queue.count) {
+    DmxJob *j = &app->queue.jobs[app->queue.active_index];
+    if (j->status == DMX_JOB_RUNNING || j->status == DMX_JOB_PREPARING) {
+      j->progress_pct = app->live.progress_pct;
+      if (app->live.status_msg[0]) {
+        snprintf(j->message, sizeof j->message, "%s", app->live.status_msg);
+      }
+    }
+  }
+
+  /* Join finished worker */
+  if (app->worker_thread && app->live.done && !app->live.running) {
+    dmx_thread_join(app->worker_thread);
+    app->worker_thread = NULL;
+    app->queue.active_index = -1;
+    app->cancel_pressed = 0;
+    dmx_worker_live_reset(&app->live);
+  }
+
+  /* Start next job if idle */
+  if (!app->worker_thread) {
+    int idx = -1;
+    DmxJob *next = dmx_queue_next_queued(&app->queue, &idx);
+    if (next) {
+      DmxWorkerArgs *wa = (DmxWorkerArgs *)calloc(1, sizeof *wa);
+      if (!wa) {
+        return;
+      }
+      wa->app = app;
+      wa->job_index = idx;
+      app->queue.active_index = idx;
+      dmx_worker_live_reset(&app->live);
+      if (dmx_thread_spawn(&app->worker_thread, worker_thread_main, wa) != 0) {
+        free(wa);
+        next->status = DMX_JOB_ERROR;
+        snprintf(next->message, sizeof next->message, "Failed to spawn worker thread");
+        app->queue.active_index = -1;
+        app->worker_thread = NULL;
+      }
+    }
+  }
+}

@@ -78,8 +78,9 @@ def apply_model(
     batch_size: int = 8,
     seed: tp.Optional[int] = None,
     _rng: tp.Optional[random.Random] = None,
+    progress_callback: tp.Optional[tp.Callable[[int, int], None]] = None,
 ):
-    progress_enabled = bool(progress)
+    progress_enabled = bool(progress) or progress_callback is not None
     if num_workers > 0:
         warnings.warn("num_workers > 0 ignored on MLX.", RuntimeWarning)
         num_workers = 0
@@ -100,7 +101,8 @@ def apply_model(
         for sub_model, model_weights in zip(model.models, model.weights):
             res = apply_model(
                 sub_model, mix, shifts, split, overlap, transition_power,
-                progress, num_workers, segment, batch_size, seed=seed, _rng=rng
+                progress, num_workers, segment, batch_size, seed=seed, _rng=rng,
+                progress_callback=progress_callback,
             )
             out = mx.array(res)
 
@@ -144,7 +146,9 @@ def apply_model(
             shifted = TensorChunk(padded_chunk, offset, length + max_shift - offset)
             shifted_out = apply_model(
                 model, shifted, 0, split, overlap, transition_power,
-                False, num_workers, segment, batch_size, seed=seed, _rng=rng
+                False, num_workers, segment, batch_size, seed=seed, _rng=rng,
+                # Only the first shift reports progress (avoids N× bar when shifts>1).
+                progress_callback=progress_callback if _ == 0 else None,
             )
             out = out + shifted_out[..., max_shift - offset:]
         out = out / shifts
@@ -173,9 +177,20 @@ def apply_model(
             _WEIGHT_CACHE[cache_key] = weight
 
         progress_bar = None
-        if progress_enabled:
+        segments_done = 0
+        segments_total = len(offsets)
+
+        def _note_progress() -> None:
+            nonlocal segments_done
+            segments_done += 1
+            if progress_bar is not None:
+                progress_bar.update(1)
+            if progress_callback is not None:
+                progress_callback(segments_done, segments_total)
+
+        if progress_enabled and progress_callback is None:
             from tqdm import tqdm
-            progress_bar = tqdm(total=len(offsets), desc="segments", unit="seg", leave=False)
+            progress_bar = tqdm(total=segments_total, desc="segments", unit="seg", leave=False)
 
         # --- BATCHING STATE ---
         batch_inputs = []
@@ -214,8 +229,7 @@ def apply_model(
                     out[:, :, :, offset:end] = out[:, :, :, offset:end] + update
                     sum_weight[offset:end] = sum_weight[offset:end] + weight
 
-                    if progress_bar is not None:
-                        progress_bar.update(1)
+                    _note_progress()
             else:
                 for i, idx in enumerate(batch_indices):
                     chunk_out = center_trim(batch_out[i], segment_length)
@@ -226,8 +240,7 @@ def apply_model(
                     out = out.at[:, :, :, offset:end].add(weight.reshape(1, 1, 1, -1) * chunk_out)
                     sum_weight = sum_weight.at[offset:end].add(weight)
 
-                    if progress_bar is not None:
-                        progress_bar.update(1)
+                    _note_progress()
 
             mx.eval(out, sum_weight)
             batch_inputs = []
@@ -271,8 +284,7 @@ def apply_model(
                         out = out.at[:, :, :, offset:end].add(w * chunk_out)
                         sum_weight = sum_weight.at[offset:end].add(weight[:this_chunk_len])
                     mx.eval(out, sum_weight)  # Eval to bound graph size
-                    if progress_bar is not None:
-                        progress_bar.update(1)
+                    _note_progress()
 
             flush_batch()
         finally:
