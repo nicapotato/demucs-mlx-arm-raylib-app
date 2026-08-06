@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifndef DMX_APP_VERSION
+#define DMX_APP_VERSION "0.0.0"
+#endif
+
 static int point_in(int x, int y, Rectangle r) {
   return x >= (int)r.x && x < (int)(r.x + r.width) && y >= (int)r.y && y < (int)(r.y + r.height);
 }
@@ -105,6 +109,9 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
   }
 
   DrawText(app->status_line, 24, screen_h - 36, 16, (Color){200, 200, 200, 255});
+  const char *ver = TextFormat("v%s", DMX_APP_VERSION);
+  int vw = MeasureText(ver, 14);
+  DrawText(ver, screen_w - vw - 24, screen_h - 34, 14, (Color){120, 120, 128, 255});
 }
 
 int dmx_ui_handle_click(DmxApp *app, int x, int y, int screen_w, int screen_h) {

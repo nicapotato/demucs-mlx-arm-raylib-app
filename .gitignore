@@ -10,3 +10,9 @@ app/testdata/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+
+# Vendored raylib (cloned by app/scripts/vendor_raylib.sh)
+app/external/raylib-master
+
+# Optional local symlink to rocksmith-psarc source (prebuilt libs are committed)
+app/external/rocksmith-psarc

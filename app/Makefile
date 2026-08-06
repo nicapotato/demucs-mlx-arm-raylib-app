@@ -5,17 +5,23 @@ BUILD := $(ROOT)/build
 BIN := $(BUILD)/demucs_mlx_app
 PYTHON := $(REPO)/.venv/bin/python
 
-.PHONY: all configure build run clean bundle worker models verify-mp3 verify-psarc
+.PHONY: all configure build run clean bundle worker models verify-mp3 verify-psarc externals version
 
 all: build
 
-configure:
+externals:
+	bash "$(ROOT)/scripts/setup_externals.sh"
+
+configure: externals
 	@mkdir -p "$(BUILD)"
 	cd "$(BUILD)" && cmake .. -DCMAKE_BUILD_TYPE=Release
 
 build: configure
 	cmake --build "$(BUILD)" -j
 	@echo "Built $(BIN)"
+
+version: build
+	"$(BIN)" --version
 
 run: build
 	DEMUCS_MLX_PYTHON="$(PYTHON)" DEMUCS_MLX_CACHE="$(ROOT)/models" "$(BIN)"

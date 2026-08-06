@@ -7,15 +7,36 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_definitions(-DPLATFORM_DESKTOP -DGRAPHICS_API_OPENGL_33)
 
 set(APP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
-set(RS_PSARC_DIR "${APP_ROOT}/external/rocksmith-psarc")
+set(REPO_ROOT "${APP_ROOT}/..")
+set(RS_PREBUILT_DIR "${APP_ROOT}/external/rocksmith-psarc-prebuilt")
 set(RAYLIB_DIR "${APP_ROOT}/external/raylib-master")
 set(TINYFD_DIR "${APP_ROOT}/external/tinyfiledialogs")
 
-if(NOT EXISTS "${RS_PSARC_DIR}/CMakeLists.txt")
-  message(FATAL_ERROR "Missing rocksmith-psarc at ${RS_PSARC_DIR}")
+# Version from repo-root project.conf (single source of truth for itch / GH releases)
+set(DMX_APP_VERSION "0.0.0")
+set(DMX_PROJECT_CONF "${REPO_ROOT}/project.conf")
+if(EXISTS "${DMX_PROJECT_CONF}")
+  file(READ "${DMX_PROJECT_CONF}" _dmx_project_conf)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DMX_PROJECT_CONF}")
+  if(_dmx_project_conf MATCHES "VERSION=([^\r\n]+)")
+    set(DMX_APP_VERSION "${CMAKE_MATCH_1}")
+  endif()
+endif()
+message(STATUS "demucs mlx app version: ${DMX_APP_VERSION}")
+
+set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
+set(RS_VGMSTREAM_LIB "${RS_PREBUILT_DIR}/lib/libvgmstream.a")
+set(RS_PREBUILT_INCLUDE "${RS_PREBUILT_DIR}/include")
+if(NOT EXISTS "${RS_PREBUILT_LIB}" OR NOT EXISTS "${RS_VGMSTREAM_LIB}")
+  message(FATAL_ERROR
+    "Missing prebuilt rocksmith-psarc libs under ${RS_PREBUILT_DIR}/lib.\n"
+    "Refresh with: bash app/scripts/refresh_rocksmith_prebuilt.sh")
+endif()
+if(NOT EXISTS "${RS_PREBUILT_INCLUDE}/rocksmith_psarc.h")
+  message(FATAL_ERROR "Missing ${RS_PREBUILT_INCLUDE}/rocksmith_psarc.h")
 endif()
 if(NOT EXISTS "${RAYLIB_DIR}/CMakeLists.txt")
-  message(FATAL_ERROR "Missing raylib at ${RAYLIB_DIR}. Symlink rocknroller-gui/external/raylib-master")
+  message(FATAL_ERROR "Missing raylib at ${RAYLIB_DIR}. Run: bash app/scripts/vendor_raylib.sh")
 endif()
 if(NOT EXISTS "${TINYFD_DIR}/tinyfiledialogs.c")
   message(FATAL_ERROR "Missing tinyfiledialogs at ${TINYFD_DIR}")
@@ -24,7 +45,24 @@ endif()
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 
-add_subdirectory("${RS_PSARC_DIR}" "${CMAKE_BINARY_DIR}/rocksmith-psarc")
+# Prebuilt macOS arm64 static libs (no rocknroller checkout required).
+add_library(rocksmith_psarc STATIC IMPORTED GLOBAL)
+set_target_properties(rocksmith_psarc PROPERTIES
+  IMPORTED_LOCATION "${RS_PREBUILT_LIB}"
+  INTERFACE_INCLUDE_DIRECTORIES "${RS_PREBUILT_INCLUDE}"
+)
+
+add_library(libvgmstream STATIC IMPORTED GLOBAL)
+set_target_properties(libvgmstream PROPERTIES
+  IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
+)
+
+find_library(RS_VORBISFILE_LIB NAMES vorbisfile PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
+find_library(RS_VORBIS_LIB NAMES vorbis PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
+find_library(RS_OGG_LIB NAMES ogg PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
+if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
+  message(FATAL_ERROR "libvorbis not found (brew install libvorbis libogg)")
+endif()
 
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
@@ -44,12 +82,22 @@ add_executable(demucs_mlx_app
 target_include_directories(demucs_mlx_app PRIVATE
   "${APP_ROOT}/src"
   "${TINYFD_DIR}"
-  "${RS_PSARC_DIR}/include"
+  "${RS_PREBUILT_INCLUDE}"
 )
 
+target_compile_definitions(demucs_mlx_app PRIVATE
+  "DMX_APP_VERSION=\"${DMX_APP_VERSION}\""
+)
+
+# Link order: app glue -> vgmstream -> vorbis/ogg -> zlib
 target_link_libraries(demucs_mlx_app PRIVATE
   raylib
   rocksmith_psarc
+  libvgmstream
+  ${RS_VORBISFILE_LIB}
+  ${RS_VORBIS_LIB}
+  ${RS_OGG_LIB}
+  ZLIB::ZLIB
   Threads::Threads
 )
 

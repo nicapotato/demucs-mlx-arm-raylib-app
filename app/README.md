@@ -2,6 +2,8 @@
 
 Mac Apple Silicon stem separator GUI. Wraps [demucs-mlx](https://github.com/ssmall256/demucs-mlx) with a raylib front-end, PSARC extract via `rocksmith-psarc`, and rocknroller-compatible 6-stem MP3 output.
 
+Version is owned by [`project.conf`](../project.conf) (`VERSION=x.y.z`).
+
 ## Features
 
 - Drag-drop / file picker: MP3, WAV, OGG, FLAC, M4A, **PSARC**
@@ -18,11 +20,15 @@ uv venv .venv --python 3.12
 source .venv/bin/activate
 uv pip install -e '.[convert]' lameenc pyinstaller
 
+# Externals: raylib (cloned) + checked-in prebuilt rocksmith-psarc .a
+make -C app externals
+
 # Convert + cache weights (once)
 make -C app models
 
 # Build + run GUI
 make -C app run
+make -C app version   # prints demucs mlx app x.y.z
 
 # Acceptance checks
 make -C app verify-mp3
@@ -36,8 +42,9 @@ Env overrides:
 | `DEMUCS_MLX_PYTHON` | Dev python that has `demucs_mlx` |
 | `DEMUCS_MLX_WORKER` | Path to frozen worker binary |
 | `DEMUCS_MLX_CACHE` | Directory with `htdemucs_6s_mlx.pkl` |
+| `ROCKNROLLER_CHECKOUT` | Only for refreshing prebuilt libs via `app/scripts/refresh_rocksmith_prebuilt.sh` |
 
-## Standalone bundle (itch-ready zip)
+## Standalone bundle (local)
 
 ```bash
 make -C app bundle
@@ -45,9 +52,36 @@ make -C app bundle
 # → app/dist/demucs-mlx-app-mac-arm64.zip
 ```
 
-The zip is self-contained (GUI + frozen worker + MLX weights). No Python install required on the target Mac.
-
 Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the first time.
+
+## Distribution (itch + GitHub Release)
+
+Large binaries are **not** published to S3. Releases go to:
+
+1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` channel via butler)
+2. **GitHub Release assets** — zip + sha256 on tag `v*`
+
+### One-time repo secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `BUTLER_API_KEY` | itch.io API key |
+
+PSARC support uses checked-in arm64 static libs under [`app/external/rocksmith-psarc-prebuilt/`](external/rocksmith-psarc-prebuilt/). Refresh after rocksmith-psarc changes:
+
+```bash
+bash app/scripts/refresh_rocksmith_prebuilt.sh
+```
+
+### Ship a release
+
+1. Bump `VERSION=` in [`project.conf`](../project.conf)
+2. Commit + push to `main`
+3. Either:
+   - `git tag v0.1.0 && git push origin v0.1.0` (runs [release.yml](../.github/workflows/release.yml)), or
+   - Actions → **release** → Run workflow (optional version override / publish toggles)
+
+CI on every PR/push to `main`: [ci.yml](../.github/workflows/ci.yml) (Python lint/tests + GUI cmake build smoke).
 
 ## Rocknroller layout
 

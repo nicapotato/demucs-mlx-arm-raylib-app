@@ -6,7 +6,7 @@ demucs-mlx is a fast, native Apple Silicon port of Meta's [Demucs](https://githu
 
 ## demucs mlx app (this fork)
 
-This fork adds a standalone Apple Silicon GUI under [`app/`](app/):
+This fork adds a standalone Apple Silicon GUI under [`app/`](app/). Version: [`project.conf`](project.conf).
 
 ```bash
 make run          # dev GUI (uses .venv worker)
@@ -15,7 +15,7 @@ make verify-psarc # acceptance: PSARC -> 6 stems
 make bundle       # "demucs mlx app.app" + itch zip in app/dist/
 ```
 
-See [app/README.md](app/README.md) for details. Output layout matches rocknroller (`{out}/{track}/guitar.mp3` etc.).
+Distribution is **itch.io + GitHub Release assets** (no S3 for the large zip). See [app/README.md](app/README.md) for CI secrets (`BUTLER_API_KEY`) and release steps. PSARC decode uses checked-in prebuilt `librocksmith_psarc.a` + `libvgmstream.a` (no private-repo clone in CI).
 
 ## Features
 

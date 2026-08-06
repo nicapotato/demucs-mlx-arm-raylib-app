@@ -15,6 +15,15 @@ MACOS="$CONTENTS/MacOS"
 RES="$CONTENTS/Resources"
 ICON_SRC="$BRANDING/demucs-mlx-app-initials.png"
 
+VERSION="0.0.0"
+if [[ -f "$REPO/project.conf" ]]; then
+  VERSION="$(grep '^VERSION=' "$REPO/project.conf" | cut -d= -f2 | tr -d '[:space:]')"
+  if [[ -z "$VERSION" ]]; then
+    VERSION="0.0.0"
+  fi
+fi
+echo "Packaging demucs mlx app v${VERSION}"
+
 if [[ ! -x "$BIN" ]]; then
   echo "Build the GUI first: make -C app build" >&2
   exit 1
@@ -83,8 +92,8 @@ cat >"$CONTENTS/Info.plist" <<PLIST
   <key>CFBundleName</key><string>demucs mlx app</string>
   <key>CFBundleDisplayName</key><string>demucs mlx app</string>
   <key>CFBundleIdentifier</key><string>com.nicapotato.demucs-mlx-app</string>
-  <key>CFBundleVersion</key><string>0.1.0</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>demucs-mlx-app</string>
   <key>CFBundleIconFile</key><string>app-icon</string>

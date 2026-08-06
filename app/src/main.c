@@ -7,7 +7,27 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifndef DMX_APP_VERSION
+#define DMX_APP_VERSION "0.0.0"
+#endif
+
 int main(int argc, char **argv) {
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
+      printf("demucs mlx app %s\n", DMX_APP_VERSION);
+      return 0;
+    }
+    if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+      printf("demucs mlx app %s\n", DMX_APP_VERSION);
+      printf("Usage: demucs-mlx-app [options] [files...]\n");
+      printf("  --out DIR     Stem output directory\n");
+      printf("  --mp3         Write MP3 stems (default)\n");
+      printf("  --wav         Write WAV stems\n");
+      printf("  --version     Print version and exit\n");
+      return 0;
+    }
+  }
+
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
   InitWindow(980, 720, "demucs mlx app");
   SetTargetFPS(60);
@@ -19,8 +39,11 @@ int main(int argc, char **argv) {
   DmxApp app;
   dmx_app_init(&app);
   dmx_app_load_branding(&app);
+  snprintf(app.status_line, sizeof app.status_line, "Ready - drop audio or PSARC files (v%s)",
+           DMX_APP_VERSION);
 
   /* CLI paths for headless-ish verification: demucs_mlx_app file1 file2 --out DIR */
+  int file_args = 0;
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
       snprintf(app.output_dir, sizeof app.output_dir, "%s", argv[++i]);
@@ -38,10 +61,11 @@ int main(int argc, char **argv) {
       continue;
     }
     dmx_app_add_path(&app, argv[i]);
+    file_args = 1;
   }
   dmx_app_apply_settings(&app);
 
-  int auto_quit_when_idle = (argc > 1);
+  int auto_quit_when_idle = file_args;
   int saw_work = app.queue.count > 0;
 
   while (!WindowShouldClose()) {
