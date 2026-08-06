@@ -25,7 +25,21 @@ def _mlx_weights_api() -> tp.Optional[tuple[tp.Callable[[str], Path], tp.Callabl
 
 
 def get_mlx_cache_dir() -> Path:
-    """Get or create the MLX model cache directory."""
+    """Get or create the MLX model cache directory.
+
+    Precedence:
+      1. DEMUCS_MLX_CACHE env (used by the bundled app to point at Resources/models)
+      2. Optional mlx-weights shared cache
+      3. ~/.cache/demucs-mlx
+    """
+    import os
+
+    env_cache = os.environ.get("DEMUCS_MLX_CACHE")
+    if env_cache:
+        cache_dir = Path(env_cache)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
     mlx_weights = _mlx_weights_api()
     if mlx_weights is not None:
         cache_dir, _ = mlx_weights
