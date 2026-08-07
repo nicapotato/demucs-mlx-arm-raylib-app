@@ -14,7 +14,8 @@ externals:
 
 configure: externals
 	@mkdir -p "$(BUILD)"
-	cd "$(BUILD)" && cmake .. -DCMAKE_BUILD_TYPE=Release
+	cd "$(BUILD)" && cmake .. -DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
 
 build: configure
 	cmake --build "$(BUILD)" -j

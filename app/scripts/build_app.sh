@@ -51,6 +51,27 @@ cp -R "$MODELS/." "$RES/models/"
 cp -R "$BRANDING/." "$MACOS/resources/"
 cp -R "$BRANDING/." "$RES/resources/"
 
+# Fail loud if any Mach-O in the .app still expects Homebrew / non-system dylibs.
+# (Crash on itch users: DYLD "Library not loaded: /opt/homebrew/.../libvorbisfile...")
+homebrew_hits="$(
+  find "$APP" \( -type f -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 \
+    | while IFS= read -r -d '' f; do
+        if file -b "$f" 2>/dev/null | grep -q 'Mach-O'; then
+          hits="$(otool -L "$f" 2>/dev/null | grep -E '/opt/homebrew|/usr/local/opt|/usr/local/Cellar' || true)"
+          if [[ -n "$hits" ]]; then
+            echo "$f"
+            echo "$hits"
+          fi
+        fi
+      done
+)"
+if [[ -n "$homebrew_hits" ]]; then
+  echo "ERROR: bundled app still links Homebrew dylibs:" >&2
+  echo "$homebrew_hits" >&2
+  echo "GUI must static-link libvorbis/libogg; worker must ship its own @rpath dylibs." >&2
+  exit 1
+fi
+
 # Build .icns from pixel-art initials with nearest-neighbor upscale (rocknroller-style iconset)
 ICONSET="$ROOT/dist/app-icon.iconset"
 ICNS_OUT="$RES/app-icon.icns"
@@ -102,6 +123,17 @@ cat >"$CONTENTS/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# Warn if GUI minos is above Info.plist claim (build machine OS leaked into binary).
+gui_minos="$(otool -l "$MACOS/demucs-mlx-app" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
+plist_minos="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$CONTENTS/Info.plist" 2>/dev/null || echo "?")"
+echo "GUI minos=${gui_minos:-unknown}  Info.plist LSMinimumSystemVersion=${plist_minos}"
+if [[ -n "${gui_minos:-}" && "$plist_minos" != "?" ]]; then
+  if awk -v a="$gui_minos" -v b="$plist_minos" 'BEGIN{split(a,A,".");split(b,B,"."); exit !((A[1]>B[1]) || (A[1]==B[1] && A[2]>B[2]))}'; then
+    echo "WARNING: GUI binary requires macOS ${gui_minos} but Info.plist claims ${plist_minos}." >&2
+    echo "Set CMAKE_OSX_DEPLOYMENT_TARGET=${plist_minos} and rebuild." >&2
+  fi
+fi
 
 # Ad-hoc sign so Gatekeeper is slightly less angry locally
 codesign --force --deep --sign - "$APP" 2>/dev/null || true
