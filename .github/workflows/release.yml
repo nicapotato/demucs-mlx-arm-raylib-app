@@ -131,14 +131,15 @@ jobs:
           test -f "app/dist/demucs-mlx-app-mac-arm64.zip"
           plutil -p "app/dist/demucs mlx app.app/Contents/Info.plist" | grep -F "${VERSION}"
 
-      - name: Smoke bundled app (5s tone -> 6 stems)
+      - name: Smoke bundled app headless (5s tone -> 6 stems)
         run: |
           set -euo pipefail
           mkdir -p /tmp/dmx_ci_in /tmp/dmx_ci_out
           ffmpeg -y -hide_banner -loglevel error -f lavfi -i "sine=frequency=440:duration=5" \
             -ac 2 -ar 44100 /tmp/dmx_ci_in/tone5s.mp3
+          # No InitWindow — Actions macOS runners have no GPU/display for GLFW.
           "app/dist/demucs mlx app.app/Contents/MacOS/demucs-mlx-app" \
-            /tmp/dmx_ci_in/tone5s.mp3 --out /tmp/dmx_ci_out --mp3
+            --headless /tmp/dmx_ci_in/tone5s.mp3 --out /tmp/dmx_ci_out --mp3
           for s in drums bass other vocals guitar piano; do
             test -f "/tmp/dmx_ci_out/tone5s/${s}.mp3"
           done
