@@ -58,8 +58,8 @@ Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the fir
 
 Large binaries are **not** published to S3. Releases go to:
 
-1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` channel via butler)
-2. **GitHub Release assets** — zip + sha256 on a `v*` tag created by the release workflow
+1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` channel via butler) — from **ci** or **release**
+2. **GitHub Release assets** — zip + sha256 on a `v*` tag — **release** workflow only
 
 Both [ci.yml](../.github/workflows/ci.yml) and [release.yml](../.github/workflows/release.yml) are **workflow_dispatch only** (no push/PR/tag triggers).
 
@@ -75,17 +75,19 @@ PSARC support uses checked-in arm64 static libs under [`app/external/rocksmith-p
 bash app/scripts/refresh_rocksmith_prebuilt.sh
 ```
 
-### Run CI
+### Run CI (tests + itch, no git tag)
 
-From repo root (branch must be pushed):
+From repo root (branch must be pushed). Builds the macOS zip, runs headless smoke, pushes to itch.io. Does **not** create a git tag or GitHub Release.
 
 ```bash
-make ci          # or: make ci-watch
+make ci                   # or: make ci-watch
+make ci PUBLISH_ITCH=false
+make ci VERSION=0.1.1
 ```
 
 Or Actions → **ci** → Run workflow.
 
-### Ship a release
+### Ship a release (itch + GitHub tag)
 
 1. Bump `VERSION=` in [`project.conf`](../project.conf)
 2. Commit + push to `main`

@@ -13,7 +13,7 @@ GH_R := $(if $(REPO),-R "$(REPO)",)
 # Your branch must be pushed to origin. Override: make ci REF=main
 REF ?= $(shell git branch --show-current 2>/dev/null)
 
-# Release toggles (workflow_dispatch inputs). Override e.g. PUBLISH_ITCH=false
+# CI / release toggles (workflow_dispatch inputs). Override e.g. PUBLISH_ITCH=false
 PUBLISH_ITCH ?= true
 PUBLISH_GH_RELEASE ?= true
 
@@ -24,14 +24,19 @@ run build bundle verify-mp3 verify-psarc models worker clean:
 	$(MAKE) -C app $@
 
 # Dispatch GitHub Actions. Requires: gh (https://cli.github.com/), authenticated.
+# CI: python tests + macOS bundle + itch.io (no git tag / GitHub Release).
 # Examples:
 #   make ci
 #   make ci REF=main
+#   make ci PUBLISH_ITCH=false
+#   make ci VERSION=0.1.1
 #   make ci-watch
 ci:
 	@test -n "$(REPO)" || (echo "ERROR: could not resolve origin repo; set REPO=owner/name" >&2; exit 1)
 	gh $(GH_R) workflow run "$(CI_WORKFLOW)" \
-		$(if $(REF),-r "$(REF)",)
+		$(if $(REF),-r "$(REF)",) \
+		-f publish_itch="$(PUBLISH_ITCH)" \
+		$(if $(VERSION),-f version="$(VERSION)",)
 
 # Full release: bundle + itch + GitHub Release (version from project.conf unless VERSION=).
 # Examples:

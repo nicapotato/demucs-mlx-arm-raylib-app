@@ -2,10 +2,26 @@ name: ci
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override for itch --userversion (leave empty to use project.conf)"
+        required: false
+        default: ""
+        type: string
+      publish_itch:
+        description: "Push zip to itch.io (no GitHub tag/release)"
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: ci-${{ github.sha }}
   cancel-in-progress: true
+
+env:
+  ITCH_USER: nicapotato
+  ITCH_GAME: demucs-mlx-app
+  PYTHON_VERSION: "3.12"
 
 jobs:
   python:
@@ -54,30 +70,151 @@ jobs:
           print('Import test passed')
           "
 
-  build-app:
-    runs-on: macos-latest
-    timeout-minutes: 45
+  read-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - id: v
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            V="${INPUT_VERSION}"
+          else
+            V=$(grep '^VERSION=' project.conf | cut -d= -f2 | tr -d '[:space:]')
+          fi
+          if [ -z "$V" ]; then
+            echo "ERROR: empty version" >&2
+            exit 1
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${V}"
+
+  build-and-publish:
+    runs-on: macos-latest
+    needs: read-version
+    timeout-minutes: 120
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      VERSION: ${{ needs.read-version.outputs.version }}
+    steps:
+      - name: Checkout demucs-mlx-arm-raylib-app
+        uses: actions/checkout@v4
 
       - name: Install Homebrew deps
         run: |
           set -euo pipefail
-          brew install libvorbis libogg
+          brew install libvorbis libogg ffmpeg
 
-      - name: Wire externals (raylib + prebuilt rocksmith-psarc)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Wire externals (raylib + checked-in prebuilt rocksmith-psarc)
         run: |
           set -euo pipefail
-          chmod +x app/scripts/setup_externals.sh app/scripts/vendor_raylib.sh
+          chmod +x app/scripts/*.sh
           bash app/scripts/setup_externals.sh
 
       - name: Build GUI (CMake Release)
-        run: |
-          set -euo pipefail
-          make -C app build
+        run: make -C app build
 
       - name: Smoke --version
         run: |
           set -euo pipefail
           ./app/build/demucs_mlx_app --version
-          ./app/build/demucs_mlx_app --version | grep -E 'demucs mlx app [0-9]'
+          ./app/build/demucs_mlx_app --version | grep -F "${VERSION}"
+
+      - name: Install Python package (convert + freeze deps)
+        run: |
+          set -euo pipefail
+          uv venv .venv --python "${{ env.PYTHON_VERSION }}"
+          source .venv/bin/activate
+          uv pip install -e '.[convert]' lameenc pyinstaller
+
+      - name: Restore MLX model cache
+        uses: actions/cache@v4
+        id: model-cache
+        with:
+          path: app/models/htdemucs_6s_mlx.pkl
+          key: htdemucs-6s-mlx-${{ hashFiles('demucs_mlx/__init__.py', 'demucs_mlx/remote/htdemucs_6s.yaml') }}
+
+      - name: Convert / ensure MLX weights
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          make -C app models
+          test -f app/models/htdemucs_6s_mlx.pkl
+
+      - name: Freeze worker (PyInstaller)
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          make -C app worker
+
+      - name: Bundle .app + zip
+        run: |
+          set -euo pipefail
+          bash app/scripts/build_app.sh
+          test -f "app/dist/demucs-mlx-app-mac-arm64.zip"
+          plutil -p "app/dist/demucs mlx app.app/Contents/Info.plist" | grep -F "${VERSION}"
+
+      - name: Smoke bundled app headless (5s tone -> 6 stems)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dmx_ci_in /tmp/dmx_ci_out
+          ffmpeg -y -hide_banner -loglevel error -f lavfi -i "sine=frequency=440:duration=5" \
+            -ac 2 -ar 44100 /tmp/dmx_ci_in/tone5s.mp3
+          # No InitWindow — Actions macOS runners have no GPU/display for GLFW.
+          "app/dist/demucs mlx app.app/Contents/MacOS/demucs-mlx-app" \
+            --headless /tmp/dmx_ci_in/tone5s.mp3 --out /tmp/dmx_ci_out --mp3
+          for s in drums bass other vocals guitar piano; do
+            test -f "/tmp/dmx_ci_out/tone5s/${s}.mp3"
+          done
+          ls -la /tmp/dmx_ci_out/tone5s/
+
+      - name: Prepare zip artifact
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp "app/dist/demucs-mlx-app-mac-arm64.zip" release-assets/
+          (
+            cd release-assets
+            shasum -a 256 demucs-mlx-app-mac-arm64.zip | tee demucs-mlx-app-mac-arm64.zip.sha256
+          )
+          ls -la release-assets/
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demucs-mlx-app-mac-arm64-zip
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Setup butler
+        if: github.event.inputs.publish_itch == 'true'
+        uses: remarkablegames/setup-butler@v2
+        with:
+          butler-version: LATEST
+
+      - name: Push to itch.io
+        if: github.event.inputs.publish_itch == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BUTLER_API_KEY:-}" ]; then
+            echo "ERROR: BUTLER_API_KEY secret is not set" >&2
+            exit 1
+          fi
+          butler push release-assets/demucs-mlx-app-mac-arm64.zip \
+            "${ITCH_USER}/${ITCH_GAME}:macos-arm64" \
+            --userversion "${VERSION}"
+          echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
