@@ -1,6 +1,6 @@
 # Prebuilt rocksmith-psarc (macOS arm64)
 
-Static libraries + public headers used by demucs mlx app so CI does not need the private
+Static libraries + public headers used by DemucsMLX so CI does not need the private
 `rocknroller` checkout.
 
 | File | Role |

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assemble "demucs mlx app.app" for local / itch distribution (standalone).
+# Assemble "DemucsMLX.app" for local / itch distribution (standalone).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,7 +8,9 @@ BIN="$ROOT/build/demucs_mlx_app"
 WORKER_DIR="$ROOT/dist/worker/demucs_mlx_worker"
 MODELS="$ROOT/models"
 BRANDING="$REPO/resources"
-APP_NAME="demucs mlx app"
+APP_NAME="DemucsMLX"
+APP_EXEC="DemucsMLX"
+ZIP_NAME="DemucsMLX-mac-arm64.zip"
 APP="$ROOT/dist/${APP_NAME}.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
@@ -22,7 +24,7 @@ if [[ -f "$REPO/project.conf" ]]; then
     VERSION="0.0.0"
   fi
 fi
-echo "Packaging demucs mlx app v${VERSION}"
+echo "Packaging ${APP_NAME} v${VERSION}"
 
 if [[ ! -x "$BIN" ]]; then
   echo "Build the GUI first: make -C app build" >&2
@@ -44,7 +46,7 @@ fi
 rm -rf "$APP"
 mkdir -p "$MACOS/resources" "$RES/worker" "$RES/models" "$RES/resources"
 
-cp "$BIN" "$MACOS/demucs-mlx-app"
+cp "$BIN" "$MACOS/${APP_EXEC}"
 cp -R "$WORKER_DIR/." "$RES/worker/"
 cp -R "$MODELS/." "$RES/models/"
 # Branding for SearchAndSetResourceDir / GetApplicationDirectory fallbacks
@@ -110,13 +112,13 @@ cat >"$CONTENTS/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>demucs mlx app</string>
-  <key>CFBundleDisplayName</key><string>demucs mlx app</string>
+  <key>CFBundleName</key><string>${APP_NAME}</string>
+  <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
   <key>CFBundleIdentifier</key><string>com.nicapotato.demucs-mlx-app</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>demucs-mlx-app</string>
+  <key>CFBundleExecutable</key><string>${APP_EXEC}</string>
   <key>CFBundleIconFile</key><string>app-icon</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -125,7 +127,7 @@ cat >"$CONTENTS/Info.plist" <<PLIST
 PLIST
 
 # Warn if GUI minos is above Info.plist claim (build machine OS leaked into binary).
-gui_minos="$(otool -l "$MACOS/demucs-mlx-app" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
+gui_minos="$(otool -l "$MACOS/${APP_EXEC}" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
 plist_minos="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$CONTENTS/Info.plist" 2>/dev/null || echo "?")"
 echo "GUI minos=${gui_minos:-unknown}  Info.plist LSMinimumSystemVersion=${plist_minos}"
 if [[ -n "${gui_minos:-}" && "$plist_minos" != "?" ]]; then
@@ -139,11 +141,11 @@ fi
 codesign --force --deep --sign - "$APP" 2>/dev/null || true
 
 # Zip for itch upload
-ZIP="$ROOT/dist/demucs-mlx-app-mac-arm64.zip"
+ZIP="$ROOT/dist/${ZIP_NAME}"
 rm -f "$ZIP"
 (
   cd "$ROOT/dist"
-  ditto -c -k --keepParent "${APP_NAME}.app" "demucs-mlx-app-mac-arm64.zip"
+  ditto -c -k --keepParent "${APP_NAME}.app" "${ZIP_NAME}"
 )
 
 echo "App: $APP"

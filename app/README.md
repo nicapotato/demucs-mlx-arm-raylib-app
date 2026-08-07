@@ -1,4 +1,4 @@
-# demucs mlx app
+# DemucsMLX
 
 Mac Apple Silicon stem separator GUI. Wraps [demucs-mlx](https://github.com/ssmall256/demucs-mlx) with a raylib front-end, PSARC extract via `rocksmith-psarc`, and rocknroller-compatible 6-stem MP3 output.
 
@@ -28,7 +28,7 @@ make -C app models
 
 # Build + run GUI
 make -C app run
-make -C app version   # prints demucs mlx app x.y.z
+make -C app version   # prints DemucsMLX x.y.z
 
 # Acceptance checks
 make -C app verify-mp3
@@ -48,8 +48,8 @@ Env overrides:
 
 ```bash
 make -C app bundle
-# → app/dist/demucs mlx app.app
-# → app/dist/demucs-mlx-app-mac-arm64.zip
+# → app/dist/DemucsMLX.app
+# → app/dist/DemucsMLX-mac-arm64.zip
 ```
 
 Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the first time.

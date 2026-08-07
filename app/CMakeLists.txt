@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 # Must be set before project() so the binary's LC_BUILD_VERSION minos matches
 # Info.plist LSMinimumSystemVersion (and does not inherit the build machine's OS).
 if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version for demucs mlx app")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version for DemucsMLX")
 endif()
 
 project(demucs_mlx_app LANGUAGES C)
@@ -29,7 +29,7 @@ if(EXISTS "${DMX_PROJECT_CONF}")
     set(DMX_APP_VERSION "${CMAKE_MATCH_1}")
   endif()
 endif()
-message(STATUS "demucs mlx app version: ${DMX_APP_VERSION}")
+message(STATUS "DemucsMLX version: ${DMX_APP_VERSION}")
 
 set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
 set(RS_VGMSTREAM_LIB "${RS_PREBUILT_DIR}/lib/libvgmstream.a")

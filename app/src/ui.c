@@ -273,7 +273,7 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
     DrawText("Apple Silicon stem separator", 24, (int)(16 + draw_h + 6), 16,
              (Color){160, 160, 168, 255});
   } else {
-    DrawText("demucs mlx app", 24, 20, 32, (Color){240, 236, 228, 255});
+    DrawText("DemucsMLX", 24, 20, 32, (Color){240, 236, 228, 255});
     DrawText("Apple Silicon stem separator", 24, 56, 16, (Color){160, 160, 168, 255});
   }
 

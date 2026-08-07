@@ -137,12 +137,12 @@ static int run_headless(DmxApp *app) {
 int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
-      printf("demucs mlx app %s\n", DMX_APP_VERSION);
+      printf("DemucsMLX %s\n", DMX_APP_VERSION);
       return 0;
     }
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-      printf("demucs mlx app %s\n", DMX_APP_VERSION);
-      printf("Usage: demucs-mlx-app [options] [files...]\n");
+      printf("DemucsMLX %s\n", DMX_APP_VERSION);
+      printf("Usage: DemucsMLX [options] [files...]\n");
       printf("  --out DIR     Stem output directory (required for headless / file args)\n");
       printf("  --mp3         Write MP3 stems (default)\n");
       printf("  --wav         Write WAV stems\n");
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
   }
 
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-  InitWindow(980, 720, "demucs mlx app");
+  InitWindow(980, 720, "DemucsMLX");
   SetTargetFPS(60);
 
   if (!SearchAndSetResourceDir("resources")) {
