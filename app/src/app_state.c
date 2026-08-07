@@ -49,19 +49,15 @@ void dmx_app_init(DmxApp *app) {
   dmx_worker_live_reset(&app->live);
   app->model_index = 0;
   app->write_mp3 = 1;
-
-  const char *home = getenv("HOME");
-  if (home) {
-    snprintf(app->output_dir, sizeof app->output_dir, "%s/Documents/psarc/stems", home);
-  } else {
-    snprintf(app->output_dir, sizeof app->output_dir, "./stems");
-  }
+  app->output_dir[0] = '\0';
+  app->output_dir_accepted = 0;
 
   char err[512];
   if (dmx_worker_resolve(&app->worker_cfg, err, sizeof err) != 0) {
     snprintf(app->status_line, sizeof app->status_line, "%s", err);
   } else {
-    snprintf(app->status_line, sizeof app->status_line, "Ready - drop audio or PSARC files");
+    snprintf(app->status_line, sizeof app->status_line,
+             "Pick an output folder, then drop audio or PSARC files");
   }
   dmx_app_apply_settings(app);
 }
@@ -123,8 +119,22 @@ void dmx_app_apply_settings(DmxApp *app) {
   app->worker_cfg.write_mp3 = app->write_mp3;
 }
 
+void dmx_app_set_output_dir(DmxApp *app, const char *dir) {
+  if (!app || !dir || !dir[0]) {
+    return;
+  }
+  snprintf(app->output_dir, sizeof app->output_dir, "%s", dir);
+  app->output_dir_accepted = 1;
+  snprintf(app->status_line, sizeof app->status_line, "Output -> %s", dir);
+}
+
 void dmx_app_add_path(DmxApp *app, const char *path) {
   if (!app || !path || !path[0]) {
+    return;
+  }
+  if (!app->output_dir_accepted || !app->output_dir[0]) {
+    snprintf(app->status_line, sizeof app->status_line,
+             "Pick an output folder before adding files");
     return;
   }
   if (!is_supported_path(path)) {
@@ -236,8 +246,11 @@ void dmx_app_tick(DmxApp *app) {
     dmx_worker_live_reset(&app->live);
   }
 
-  /* Start next job if idle */
+  /* Start next job if idle (output folder must be accepted first). */
   if (!app->worker_thread) {
+    if (!app->output_dir_accepted || !app->output_dir[0]) {
+      return;
+    }
     int idx = -1;
     DmxJob *next = dmx_queue_next_queued(&app->queue, &idx);
     if (next) {

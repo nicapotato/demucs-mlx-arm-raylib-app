@@ -5,6 +5,7 @@
 #include "raylib.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifndef DMX_APP_VERSION
@@ -24,6 +25,15 @@ static void draw_button(Rectangle r, const char *label, Color bg) {
   DrawRectangleLinesEx(r, 1.0f, Fade(WHITE, 0.35f));
   int tw = MeasureText(label, 18);
   DrawText(label, (int)(r.x + (r.width - tw) / 2), (int)(r.y + (r.height - 18) / 2), 18, WHITE);
+}
+
+/* Layout shared by draw + hit-testing (logo header ~72px → controls at 90). */
+static float controls_y_for_hit(void) {
+  return 90.0f;
+}
+
+static Rectangle out_path_rect(float info_y, int screen_w) {
+  return (Rectangle){20, info_y - 4.0f, (float)screen_w - 40.0f, 28.0f};
 }
 
 void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
@@ -58,30 +68,45 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
   Rectangle fmt_btn = btn(560, controls_y, 120, 36);
   Rectangle cancel_btn = btn(screen_w - 140.0f, controls_y, 116, 36);
 
+  const int out_ok = app->output_dir_accepted && app->output_dir[0];
+  const Color out_border = out_ok ? (Color){70, 180, 100, 255} : (Color){210, 70, 70, 255};
+
   draw_button(add_btn, "Add files...", (Color){52, 96, 140, 255});
   draw_button(out_btn, "Output folder...", (Color){52, 96, 140, 255});
+  DrawRectangleLinesEx((Rectangle){out_btn.x - 2, out_btn.y - 2, out_btn.width + 4, out_btn.height + 4},
+                       2.0f, out_border);
   draw_button(model_btn, app->model_index == 0 ? "Model: htdemucs_6s" : "Model: htdemucs",
               (Color){70, 70, 80, 255});
   draw_button(fmt_btn, app->write_mp3 ? "Out: MP3" : "Out: WAV", (Color){70, 70, 80, 255});
   draw_button(cancel_btn, "Cancel", (Color){140, 60, 60, 255});
 
   float info_y = controls_y + 48.0f;
-  DrawText(TextFormat("Output: %s", app->output_dir), 24, (int)info_y, 16, (Color){180, 180, 188, 255});
-  DrawText(TextFormat("Worker: %s", app->worker_cfg.python_or_worker), 24, (int)info_y + 22, 14,
+  Rectangle path_box = out_path_rect(info_y, screen_w);
+  DrawRectangleRec(path_box, (Color){24, 26, 32, 255});
+  DrawRectangleLinesEx(path_box, 2.0f, out_border);
+  if (out_ok) {
+    DrawText(TextFormat("Output: %s", app->output_dir), 28, (int)info_y, 16,
+             (Color){180, 180, 188, 255});
+  } else {
+    DrawText("Output: (not set — pick a folder)", 28, (int)info_y, 16, (Color){210, 120, 120, 255});
+  }
+  DrawText(TextFormat("Worker: %s", app->worker_cfg.python_or_worker), 24, (int)info_y + 30, 14,
            (Color){120, 120, 128, 255});
   if (app->worker_cfg.model_cache_dir[0]) {
-    DrawText(TextFormat("Models: %s", app->worker_cfg.model_cache_dir), 24, (int)info_y + 40, 14,
+    DrawText(TextFormat("Models: %s", app->worker_cfg.model_cache_dir), 24, (int)info_y + 48, 14,
              (Color){120, 120, 128, 255});
   }
 
   /* Drop zone */
-  float drop_y = info_y + 70.0f;
+  float drop_y = info_y + 78.0f;
   Rectangle drop = {24, drop_y, (float)screen_w - 48, 80};
   DrawRectangleRec(drop, (Color){28, 32, 40, 255});
-  DrawRectangleLinesEx(drop, 2.0f, (Color){80, 90, 110, 255});
-  const char *hint = "Drop MP3 / WAV / OGG / FLAC / PSARC here";
+  DrawRectangleLinesEx(drop, 2.0f, out_ok ? (Color){80, 90, 110, 255} : (Color){210, 70, 70, 255});
+  const char *hint =
+      out_ok ? "Drop MP3 / WAV / OGG / FLAC / PSARC here" : "Pick an output folder before dropping files";
   int tw = MeasureText(hint, 20);
-  DrawText(hint, (int)(drop.x + (drop.width - tw) / 2), (int)(drop.y + 30), 20, (Color){150, 155, 170, 255});
+  DrawText(hint, (int)(drop.x + (drop.width - tw) / 2), (int)(drop.y + 30), 20,
+           out_ok ? (Color){150, 155, 170, 255} : (Color){210, 140, 140, 255});
 
   /* Job list */
   int y = (int)(drop_y + 100.0f);
@@ -116,8 +141,7 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
 
 int dmx_ui_handle_click(DmxApp *app, int x, int y, int screen_w, int screen_h) {
   (void)screen_h;
-  /* Keep hitboxes aligned with dmx_ui_draw layout (logo header ~72px). */
-  float controls_y = 90.0f;
+  float controls_y = controls_y_for_hit();
   Rectangle add_btn = btn(24, controls_y, 140, 36);
   Rectangle out_btn = btn(176, controls_y, 160, 36);
   Rectangle model_btn = btn(348, controls_y, 200, 36);
@@ -125,6 +149,11 @@ int dmx_ui_handle_click(DmxApp *app, int x, int y, int screen_w, int screen_h) {
   Rectangle cancel_btn = btn(screen_w - 140.0f, controls_y, 116, 36);
 
   if (point_in(x, y, add_btn)) {
+    if (!app->output_dir_accepted || !app->output_dir[0]) {
+      snprintf(app->status_line, sizeof app->status_line,
+               "Pick an output folder before adding files");
+      return 1;
+    }
     const char *filters[] = {"*.mp3", "*.wav", "*.ogg", "*.flac", "*.m4a", "*.psarc"};
     const char *path = tinyfd_openFileDialog("Add audio or PSARC", "", 6, filters, "Audio / PSARC", 1);
     if (path && path[0]) {
@@ -141,10 +170,11 @@ int dmx_ui_handle_click(DmxApp *app, int x, int y, int screen_w, int screen_h) {
     return 1;
   }
   if (point_in(x, y, out_btn)) {
-    const char *dir = tinyfd_selectFolderDialog("Stem output folder", app->output_dir);
+    const char *home = getenv("HOME");
+    const char *start = app->output_dir[0] ? app->output_dir : (home ? home : "");
+    const char *dir = tinyfd_selectFolderDialog("Stem output folder", start);
     if (dir && dir[0]) {
-      snprintf(app->output_dir, sizeof app->output_dir, "%s", dir);
-      snprintf(app->status_line, sizeof app->status_line, "Output -> %s", dir);
+      dmx_app_set_output_dir(app, dir);
     }
     return 1;
   }
