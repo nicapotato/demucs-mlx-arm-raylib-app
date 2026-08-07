@@ -97,6 +97,9 @@ static int run_headless(DmxApp *app) {
     return 2;
   }
 
+  /* Headless has no Start button - process the queue immediately. */
+  app->processing_enabled = 1;
+
   printf("headless: %d job(s) -> %s (worker %s)\n", app->queue.count, app->output_dir,
          app->worker_cfg.python_or_worker);
   fflush(stdout);
@@ -146,7 +149,7 @@ int main(int argc, char **argv) {
       printf("  --headless    No GUI (CI / machines without GPU display)\n");
       printf("  --version     Print version and exit\n");
       printf("\nWith input files, runs headless by default (no InitWindow).\n");
-      printf("GUI: pick Output folder before adding/dropping files (no default path).\n");
+      printf("GUI: add files anytime; pick Output folder, then press Start (no default path).\n");
       return 0;
     }
   }
@@ -179,15 +182,16 @@ int main(int argc, char **argv) {
 
   dmx_app_load_branding(&app);
   if (app.output_dir_accepted) {
-    snprintf(app.status_line, sizeof app.status_line, "Ready - drop audio or PSARC files (v%s)",
-             DMX_APP_VERSION);
+    snprintf(app.status_line, sizeof app.status_line,
+             "Output ready - add files and press Start (v%s)", DMX_APP_VERSION);
   } else {
     snprintf(app.status_line, sizeof app.status_line,
-             "Pick an output folder, then drop audio or PSARC files (v%s)", DMX_APP_VERSION);
+             "Add files, pick output folder, press Start (v%s)", DMX_APP_VERSION);
   }
 
   while (!WindowShouldClose()) {
     dmx_app_tick(&app);
+    dmx_ui_poll(&app);
 
     if (IsFileDropped()) {
       FilePathList dropped = LoadDroppedFiles();
@@ -207,6 +211,7 @@ int main(int argc, char **argv) {
     EndDrawing();
   }
 
+  dmx_ui_shutdown();
   dmx_app_shutdown(&app);
   CloseWindow();
   return 0;

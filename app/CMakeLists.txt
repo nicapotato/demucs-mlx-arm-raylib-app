@@ -90,6 +90,7 @@ add_subdirectory("${RAYLIB_DIR}" "${CMAKE_BINARY_DIR}/raylib-build")
 add_executable(demucs_mlx_app
   src/main.c
   src/app_state.c
+  src/prefs.c
   src/job_queue.c
   src/worker_run.c
   src/psarc_input.c
