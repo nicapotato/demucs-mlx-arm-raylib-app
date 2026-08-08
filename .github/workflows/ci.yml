@@ -216,4 +216,5 @@ jobs:
           fi
           butler push release-assets/DemucsMLX-mac-arm64.zip \
             "${ITCH_USER}/${ITCH_GAME}:macos-arm64" \
-            --userversion "${VERSION}"          echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
+            --userversion "${VERSION}"
+          echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
