@@ -4,7 +4,7 @@ Split any song into its individual stems — vocals, drums, bass, and other inst
 
 demucs-mlx is a fast, native Apple Silicon port of Meta's [Demucs](https://github.com/adefossez/demucs) music source separation model, built on [MLX](https://github.com/ml-explore/mlx). No PyTorch required.
 
-## demucs mlx app (this fork)
+## DemucsMLX (this fork)
 
 This fork adds a standalone Apple Silicon GUI under [`app/`](app/). Version: [`project.conf`](project.conf).
 
@@ -12,7 +12,7 @@ This fork adds a standalone Apple Silicon GUI under [`app/`](app/). Version: [`p
 make run          # dev GUI (uses .venv worker)
 make verify-mp3   # acceptance: short MP3 -> 6 stems
 make verify-psarc # acceptance: PSARC -> 6 stems
-make bundle       # "demucs mlx app.app" + itch zip in app/dist/
+make bundle       # DemucsMLX.app + itch zip in app/dist/
 ```
 
 Distribution is **itch.io + GitHub Release assets** (no S3 for the large zip). See [app/README.md](app/README.md) for CI secrets (`BUTLER_API_KEY`) and release steps. PSARC decode uses checked-in prebuilt `librocksmith_psarc.a` + `libvgmstream.a` (no private-repo clone in CI).

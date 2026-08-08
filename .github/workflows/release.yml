@@ -128,8 +128,8 @@ jobs:
         run: |
           set -euo pipefail
           bash app/scripts/build_app.sh
-          test -f "app/dist/demucs-mlx-app-mac-arm64.zip"
-          plutil -p "app/dist/demucs mlx app.app/Contents/Info.plist" | grep -F "${VERSION}"
+          test -f "app/dist/DemucsMLX-mac-arm64.zip"
+          plutil -p "app/dist/DemucsMLX.app/Contents/Info.plist" | grep -F "${VERSION}"
 
       - name: Smoke bundled app headless (5s tone -> 6 stems)
         run: |
@@ -138,7 +138,7 @@ jobs:
           ffmpeg -y -hide_banner -loglevel error -f lavfi -i "sine=frequency=440:duration=5" \
             -ac 2 -ar 44100 /tmp/dmx_ci_in/tone5s.mp3
           # No InitWindow — Actions macOS runners have no GPU/display for GLFW.
-          "app/dist/demucs mlx app.app/Contents/MacOS/demucs-mlx-app" \
+          "app/dist/DemucsMLX.app/Contents/MacOS/DemucsMLX" \
             --headless /tmp/dmx_ci_in/tone5s.mp3 --out /tmp/dmx_ci_out --mp3
           for s in drums bass other vocals guitar piano; do
             test -f "/tmp/dmx_ci_out/tone5s/${s}.mp3"
@@ -149,17 +149,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          cp "app/dist/demucs-mlx-app-mac-arm64.zip" release-assets/
+          cp "app/dist/DemucsMLX-mac-arm64.zip" release-assets/
           (
             cd release-assets
-            shasum -a 256 demucs-mlx-app-mac-arm64.zip | tee demucs-mlx-app-mac-arm64.zip.sha256
+            shasum -a 256 DemucsMLX-mac-arm64.zip | tee DemucsMLX-mac-arm64.zip.sha256
           )
           ls -la release-assets/
 
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: demucs-mlx-app-mac-arm64-zip
+          name: DemucsMLX-mac-arm64-zip
           path: release-assets/*
           if-no-files-found: error
 
@@ -179,7 +179,7 @@ jobs:
             echo "ERROR: BUTLER_API_KEY secret is not set" >&2
             exit 1
           fi
-          butler push release-assets/demucs-mlx-app-mac-arm64.zip \
+          butler push release-assets/DemucsMLX-mac-arm64.zip \
             "${ITCH_USER}/${ITCH_GAME}:macos-arm64" \
             --userversion "${VERSION}"
           echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
@@ -201,11 +201,11 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
-          name: demucs mlx app ${{ env.TAG }}
+          name: DemucsMLX ${{ env.TAG }}
           generate_release_notes: true
           body: |
             ## Downloads
-            - **macOS Apple Silicon:** `demucs-mlx-app-mac-arm64.zip`
+            - **macOS Apple Silicon:** `DemucsMLX-mac-arm64.zip`
 
             Also on itch.io: https://nicapotato.itch.io/demucs-mlx-app
           files: |

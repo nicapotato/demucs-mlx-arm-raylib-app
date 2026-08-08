@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
+
+# Must be set before project() so the binary's LC_BUILD_VERSION minos matches
+# Info.plist LSMinimumSystemVersion (and does not inherit the build machine's OS).
+if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version for DemucsMLX")
+endif()
+
 project(demucs_mlx_app LANGUAGES C)
 enable_testing()
 
@@ -22,7 +29,7 @@ if(EXISTS "${DMX_PROJECT_CONF}")
     set(DMX_APP_VERSION "${CMAKE_MATCH_1}")
   endif()
 endif()
-message(STATUS "demucs mlx app version: ${DMX_APP_VERSION}")
+message(STATUS "DemucsMLX version: ${DMX_APP_VERSION}")
 
 set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
 set(RS_VGMSTREAM_LIB "${RS_PREBUILT_DIR}/lib/libvgmstream.a")
@@ -57,12 +64,24 @@ set_target_properties(libvgmstream PROPERTIES
   IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
 )
 
-find_library(RS_VORBISFILE_LIB NAMES vorbisfile PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
-find_library(RS_VORBIS_LIB NAMES vorbis PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
-find_library(RS_OGG_LIB NAMES ogg PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
+# Prefer static libs so the shipped .app does not depend on Homebrew dylibs
+# at /opt/homebrew/... (itch users do not have those installed).
+set(_dmx_find_lib_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+find_library(RS_VORBISFILE_LIB NAMES vorbisfile
+  PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+find_library(RS_VORBIS_LIB NAMES vorbis
+  PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+find_library(RS_OGG_LIB NAMES ogg
+  PATHS /opt/homebrew/opt/libogg/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+set(CMAKE_FIND_LIBRARY_SUFFIXES "${_dmx_find_lib_suffixes}")
+unset(_dmx_find_lib_suffixes)
 if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
-  message(FATAL_ERROR "libvorbis not found (brew install libvorbis libogg)")
+  message(FATAL_ERROR "static libvorbis/libogg not found (brew install libvorbis libogg)")
 endif()
+message(STATUS "libvorbisfile (static): ${RS_VORBISFILE_LIB}")
+message(STATUS "libvorbis (static): ${RS_VORBIS_LIB}")
+message(STATUS "libogg (static): ${RS_OGG_LIB}")
 
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
@@ -71,6 +90,7 @@ add_subdirectory("${RAYLIB_DIR}" "${CMAKE_BINARY_DIR}/raylib-build")
 add_executable(demucs_mlx_app
   src/main.c
   src/app_state.c
+  src/prefs.c
   src/job_queue.c
   src/worker_run.c
   src/psarc_input.c

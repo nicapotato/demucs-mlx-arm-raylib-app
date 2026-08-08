@@ -16,9 +16,10 @@ static int parse_cli(int argc, char **argv, DmxApp *app, int *out_file_args, int
   int file_args = 0;
   int force_headless = 0;
 
+  /* Pass 1: options (so --out is accepted before file adds). */
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
-      snprintf(app->output_dir, sizeof app->output_dir, "%s", argv[++i]);
+      dmx_app_set_output_dir(app, argv[++i]);
       continue;
     }
     if (strcmp(argv[i], "--wav") == 0) {
@@ -36,6 +37,22 @@ static int parse_cli(int argc, char **argv, DmxApp *app, int *out_file_args, int
     if (argv[i][0] == '-') {
       fprintf(stderr, "Unknown option: %s\n", argv[i]);
       return -1;
+    }
+    /* File path — handled in pass 2. */
+  }
+
+  /* Pass 2: input files. */
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+      ++i;
+      continue;
+    }
+    if (strcmp(argv[i], "--wav") == 0 || strcmp(argv[i], "--mp3") == 0 ||
+        strcmp(argv[i], "--headless") == 0) {
+      continue;
+    }
+    if (argv[i][0] == '-') {
+      continue;
     }
     dmx_app_add_path(app, argv[i]);
     file_args = 1;
@@ -66,6 +83,10 @@ static int jobs_pending_or_failed(const DmxApp *app, int *out_failed) {
 
 /* Process queue without InitWindow / OpenGL (GitHub Actions macOS has no GPU display). */
 static int run_headless(DmxApp *app) {
+  if (!app->output_dir_accepted || !app->output_dir[0]) {
+    fprintf(stderr, "ERROR: --out DIR is required (no default stem output folder)\n");
+    return 2;
+  }
   if (app->queue.count == 0) {
     fprintf(stderr, "ERROR: --headless requires one or more input files\n");
     return 2;
@@ -75,6 +96,9 @@ static int run_headless(DmxApp *app) {
             app->status_line[0] ? app->status_line : "no demucs worker resolved");
     return 2;
   }
+
+  /* Headless has no Start button - process the queue immediately. */
+  app->processing_enabled = 1;
 
   printf("headless: %d job(s) -> %s (worker %s)\n", app->queue.count, app->output_dir,
          app->worker_cfg.python_or_worker);
@@ -113,18 +137,19 @@ static int run_headless(DmxApp *app) {
 int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
-      printf("demucs mlx app %s\n", DMX_APP_VERSION);
+      printf("DemucsMLX %s\n", DMX_APP_VERSION);
       return 0;
     }
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-      printf("demucs mlx app %s\n", DMX_APP_VERSION);
-      printf("Usage: demucs-mlx-app [options] [files...]\n");
-      printf("  --out DIR     Stem output directory\n");
+      printf("DemucsMLX %s\n", DMX_APP_VERSION);
+      printf("Usage: DemucsMLX [options] [files...]\n");
+      printf("  --out DIR     Stem output directory (required for headless / file args)\n");
       printf("  --mp3         Write MP3 stems (default)\n");
       printf("  --wav         Write WAV stems\n");
       printf("  --headless    No GUI (CI / machines without GPU display)\n");
       printf("  --version     Print version and exit\n");
       printf("\nWith input files, runs headless by default (no InitWindow).\n");
+      printf("GUI: add files anytime; pick Output folder, then press Start (no default path).\n");
       return 0;
     }
   }
@@ -148,7 +173,7 @@ int main(int argc, char **argv) {
   }
 
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-  InitWindow(980, 720, "demucs mlx app");
+  InitWindow(980, 720, "DemucsMLX");
   SetTargetFPS(60);
 
   if (!SearchAndSetResourceDir("resources")) {
@@ -156,11 +181,17 @@ int main(int argc, char **argv) {
   }
 
   dmx_app_load_branding(&app);
-  snprintf(app.status_line, sizeof app.status_line, "Ready - drop audio or PSARC files (v%s)",
-           DMX_APP_VERSION);
+  if (app.output_dir_accepted) {
+    snprintf(app.status_line, sizeof app.status_line,
+             "Output ready - add files and press Start (v%s)", DMX_APP_VERSION);
+  } else {
+    snprintf(app.status_line, sizeof app.status_line,
+             "Add files, pick output folder, press Start (v%s)", DMX_APP_VERSION);
+  }
 
   while (!WindowShouldClose()) {
     dmx_app_tick(&app);
+    dmx_ui_poll(&app);
 
     if (IsFileDropped()) {
       FilePathList dropped = LoadDroppedFiles();
@@ -180,6 +211,7 @@ int main(int argc, char **argv) {
     EndDrawing();
   }
 
+  dmx_ui_shutdown();
   dmx_app_shutdown(&app);
   CloseWindow();
   return 0;

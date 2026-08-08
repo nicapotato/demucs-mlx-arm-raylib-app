@@ -1,5 +1,6 @@
 #include "app_state.h"
 
+#include "prefs.h"
 #include "psarc_input.h"
 
 #include <stdio.h>
@@ -42,6 +43,19 @@ static int is_supported_path(const char *path) {
   return 0;
 }
 
+int dmx_app_queued_count(const DmxApp *app) {
+  if (!app) {
+    return 0;
+  }
+  int n = 0;
+  for (int i = 0; i < app->queue.count; ++i) {
+    if (app->queue.jobs[i].status == DMX_JOB_QUEUED) {
+      ++n;
+    }
+  }
+  return n;
+}
+
 void dmx_app_init(DmxApp *app) {
   memset(app, 0, sizeof *app);
   dmx_queue_init(&app->queue);
@@ -49,20 +63,26 @@ void dmx_app_init(DmxApp *app) {
   dmx_worker_live_reset(&app->live);
   app->model_index = 0;
   app->write_mp3 = 1;
-
-  const char *home = getenv("HOME");
-  if (home) {
-    snprintf(app->output_dir, sizeof app->output_dir, "%s/Documents/psarc/stems", home);
-  } else {
-    snprintf(app->output_dir, sizeof app->output_dir, "./stems");
-  }
+  app->output_dir[0] = '\0';
+  app->output_dir_accepted = 0;
+  app->processing_enabled = 0;
 
   char err[512];
   if (dmx_worker_resolve(&app->worker_cfg, err, sizeof err) != 0) {
     snprintf(app->status_line, sizeof app->status_line, "%s", err);
   } else {
-    snprintf(app->status_line, sizeof app->status_line, "Ready - drop audio or PSARC files");
+    snprintf(app->status_line, sizeof app->status_line,
+             "Add files, pick an output folder, then press Start");
   }
+
+  /* Restore last output folder if it still exists on disk. */
+  char saved[DMX_PATH_MAX];
+  if (dmx_prefs_load_output_dir(saved, sizeof saved) == 0) {
+    snprintf(app->output_dir, sizeof app->output_dir, "%s", saved);
+    app->output_dir_accepted = 1;
+    snprintf(app->status_line, sizeof app->status_line, "Output restored -> %s", saved);
+  }
+
   dmx_app_apply_settings(app);
 }
 
@@ -123,6 +143,25 @@ void dmx_app_apply_settings(DmxApp *app) {
   app->worker_cfg.write_mp3 = app->write_mp3;
 }
 
+void dmx_app_set_output_dir(DmxApp *app, const char *dir) {
+  if (!app || !dir || !dir[0]) {
+    return;
+  }
+  snprintf(app->output_dir, sizeof app->output_dir, "%s", dir);
+  app->output_dir_accepted = 1;
+  if (dmx_prefs_save_output_dir(dir) != 0) {
+    snprintf(app->status_line, sizeof app->status_line,
+             "Output set (could not save prefs): %s", dir);
+    return;
+  }
+  int q = dmx_app_queued_count(app);
+  if (q > 0 && !app->processing_enabled) {
+    snprintf(app->status_line, sizeof app->status_line, "Output set - %d queued, press Start", q);
+  } else {
+    snprintf(app->status_line, sizeof app->status_line, "Output -> %s", dir);
+  }
+}
+
 void dmx_app_add_path(DmxApp *app, const char *path) {
   if (!app || !path || !path[0]) {
     return;
@@ -135,12 +174,46 @@ void dmx_app_add_path(DmxApp *app, const char *path) {
     snprintf(app->status_line, sizeof app->status_line, "Queue full");
     return;
   }
-  snprintf(app->status_line, sizeof app->status_line, "Added %s", path);
+  int q = dmx_app_queued_count(app);
+  if (!app->output_dir_accepted || !app->output_dir[0]) {
+    snprintf(app->status_line, sizeof app->status_line,
+             "Queued %d file(s) - pick output folder, then Start", q);
+  } else if (!app->processing_enabled) {
+    snprintf(app->status_line, sizeof app->status_line, "Queued %d file(s) - press Start", q);
+  } else {
+    snprintf(app->status_line, sizeof app->status_line, "Added %s", path);
+  }
+}
+
+void dmx_app_start(DmxApp *app) {
+  if (!app) {
+    return;
+  }
+  if (!app->output_dir_accepted || !app->output_dir[0]) {
+    snprintf(app->status_line, sizeof app->status_line, "Pick an output folder first");
+    return;
+  }
+  if (dmx_app_queued_count(app) == 0 && !app->worker_thread) {
+    snprintf(app->status_line, sizeof app->status_line, "Add files before pressing Start");
+    return;
+  }
+  app->processing_enabled = 1;
+  app->cancel_pressed = 0;
+  snprintf(app->status_line, sizeof app->status_line, "Processing...");
+}
+
+void dmx_app_stop(DmxApp *app) {
+  if (!app) {
+    return;
+  }
+  app->processing_enabled = 0;
+  app->cancel_pressed = 1;
+  dmx_worker_request_cancel(&app->live);
+  snprintf(app->status_line, sizeof app->status_line, "Stopped");
 }
 
 void dmx_app_request_cancel(DmxApp *app) {
-  app->cancel_pressed = 1;
-  dmx_worker_request_cancel(&app->live);
+  dmx_app_stop(app);
 }
 
 static void cleanup_temp(DmxJob *job) {
@@ -236,8 +309,14 @@ void dmx_app_tick(DmxApp *app) {
     dmx_worker_live_reset(&app->live);
   }
 
-  /* Start next job if idle */
+  /* Start next job only when user pressed Start and output folder is set. */
   if (!app->worker_thread) {
+    if (!app->processing_enabled) {
+      return;
+    }
+    if (!app->output_dir_accepted || !app->output_dir[0]) {
+      return;
+    }
     int idx = -1;
     DmxJob *next = dmx_queue_next_queued(&app->queue, &idx);
     if (next) {
