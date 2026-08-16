@@ -62,7 +62,7 @@ Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the fir
 
 ```powershell
 # vcpkg zlib/ogg/vorbis + VS, then:
-cmake -B app/build -S app -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+cmake -B app/build -S app -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -A x64
 cmake --build app/build --config Release --parallel
 python -m pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu121
 python -m pip install -r requirements-windows.txt

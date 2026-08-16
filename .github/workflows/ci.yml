@@ -254,12 +254,12 @@ jobs:
           path: |
             ${{ github.workspace }}/vcpkg/downloads
             ${{ github.workspace }}/vcpkg/installed
-          key: vcpkg-${{ runner.os }}-x64-dmx-ports-v1
+          key: vcpkg-${{ runner.os }}-x64-dmx-static-v1
 
       - name: Install vcpkg ports
         shell: cmd
         run: |
-          "%GITHUB_WORKSPACE%\vcpkg\vcpkg.exe" install zlib:x64-windows libogg:x64-windows libvorbis:x64-windows
+          "%GITHUB_WORKSPACE%\vcpkg\vcpkg.exe" install zlib:x64-windows-static libogg:x64-windows-static libvorbis:x64-windows-static
           if errorlevel 1 exit /b 1
 
       - name: Restore vgmstream checkout
@@ -280,7 +280,7 @@ jobs:
         working-directory: app
         run: |
           set "TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
-          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=%TOOLCHAIN% -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=%TOOLCHAIN% -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -A x64
           if errorlevel 1 exit /b 1
           cmake --build build --config Release --parallel -- /verbosity:minimal /nologo
           if errorlevel 1 exit /b 1
@@ -289,11 +289,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="${VCPKG_ROOT}/installed/x64-windows/bin:${PATH}"
           EXE="app/build/Release/DemucsMLX.exe"
           test -f "$EXE"
           "$EXE" --version
           "$EXE" --version | grep -F "${VERSION}"
+
+      - name: Assert GUI is /MT (no VC++ redist DLLs)
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -find "**\dumpbin.exe" | Select-Object -First 1
+          if (-not $dumpbin) { Write-Error "dumpbin.exe not found"; exit 1 }
+          $exe = "app\build\Release\DemucsMLX.exe"
+          $deps = & $dumpbin /DEPENDENTS $exe | Out-String
+          Write-Host $deps
+          foreach ($dll in @("VCRUNTIME140.dll", "VCRUNTIME140_1.dll", "MSVCP140.dll", "MSVCP140_1.dll", "MSVCP140_2.dll")) {
+            if ($deps -match [regex]::Escape($dll)) {
+              Write-Error "DemucsMLX.exe still depends on $dll; expected static /MT"
+              exit 1
+            }
+          }
 
       - uses: actions/setup-python@v5
         with:

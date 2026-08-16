@@ -57,8 +57,11 @@ Unsigned PyInstaller onedirs trip SmartScreen (“Windows protected your PC”) 
 way unsigned Mac `.app` bundles trip Gatekeeper. Right-click → Open / More info → Run anyway.
 
 Windows PSARC: CI builds `app/external/rocksmith-psarc-src` plus a public vgmstream
-clone (`app/scripts/vendor_vgmstream.sh`). Optional MSVC `.lib` prebuilts can still
-be generated with `pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1`.
+clone (`app/scripts/vendor_vgmstream.sh`). The GUI uses `/MT` and vcpkg
+`x64-windows-static` so itch users are not asked to install VC++ redistributable.
+
+Optional MSVC `.lib` prebuilts can still be generated with
+`pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1`.
 
 ## Linux
 

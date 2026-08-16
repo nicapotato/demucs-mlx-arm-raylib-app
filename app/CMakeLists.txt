@@ -6,6 +6,15 @@ if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQU
   set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version for DemucsMLX")
 endif()
 
+# Windows itch builds: static MSVC CRT (/MT) so users are not prompted for VC++ redist.
+# Pair with vcpkg triplet x64-windows-static (same /MT) to avoid CRT mismatch.
+if(WIN32)
+  if(NOT DEFINED VCPKG_TARGET_TRIPLET OR VCPKG_TARGET_TRIPLET STREQUAL "")
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "vcpkg triplet")
+  endif()
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
+
 # CXX is required when Windows builds vgmstream from source (libvgmstream).
 project(demucs_mlx_app LANGUAGES C CXX)
 enable_testing()
@@ -89,7 +98,7 @@ if(WIN32)
   find_library(RS_VORBIS_LIB NAMES vorbis)
   find_library(RS_OGG_LIB NAMES ogg)
   if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
-    message(FATAL_ERROR "libvorbis not found (Windows: vcpkg install libogg:x64-windows libvorbis:x64-windows)")
+    message(FATAL_ERROR "libvorbis not found (Windows: vcpkg install libogg:x64-windows-static libvorbis:x64-windows-static)")
   endif()
 else()
   set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
@@ -187,6 +196,14 @@ endif()
 if(WIN32)
   target_link_libraries(demucs_mlx_app PRIVATE opengl32 gdi32 winmm comdlg32 ole32)
   target_compile_definitions(demucs_mlx_app PRIVATE _CRT_SECURE_NO_WARNINGS)
+  # Subprojects (raylib / vgmstream) can reset /MD; keep the shipped exe /MT.
+  foreach(_dmx_crt_tgt IN ITEMS demucs_mlx_app raylib glfw glfw_objects rglfw rocksmith_psarc libvgmstream)
+    if(TARGET ${_dmx_crt_tgt})
+      set_property(TARGET ${_dmx_crt_tgt} PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+  endforeach()
+  unset(_dmx_crt_tgt)
 endif()
 
 if(NOT MSVC)

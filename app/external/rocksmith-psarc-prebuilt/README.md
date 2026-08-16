@@ -13,7 +13,7 @@ Static libraries + public headers used by DemucsMLX so CI does not need the priv
 
 **macOS build-time deps (static link):** zlib (system), libvorbis, libogg (`brew install libvorbis libogg`). End users do not need Homebrew.
 
-**Windows build-time deps:** vcpkg `zlib:x64-windows` `libogg:x64-windows` `libvorbis:x64-windows`.
+**Windows build-time deps:** vcpkg `zlib:x64-windows-static` `libogg:x64-windows-static` `libvorbis:x64-windows-static` (`/MT`).
 
 Refresh from a sibling rocknroller tree:
 

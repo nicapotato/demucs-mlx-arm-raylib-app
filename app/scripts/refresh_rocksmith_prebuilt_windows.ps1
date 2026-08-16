@@ -19,7 +19,7 @@ if (-not (Test-Path (Join-Path $Rs "CMakeLists.txt"))) {
 }
 
 if (-not $env:VCPKG_ROOT) {
-    Write-Error "VCPKG_ROOT is not set. Install vcpkg and: vcpkg install zlib:x64-windows libogg:x64-windows libvorbis:x64-windows"
+    Write-Error "VCPKG_ROOT is not set. Install vcpkg and: vcpkg install zlib:x64-windows-static libogg:x64-windows-static libvorbis:x64-windows-static"
 }
 
 $Toolchain = Join-Path $env:VCPKG_ROOT "scripts\buildsystems\vcpkg.cmake"
@@ -27,7 +27,8 @@ $Build = Join-Path $Rs "build-prebuilt-win64"
 Write-Host "Configuring $Rs -> $Build"
 cmake -S $Rs -B $Build -DCMAKE_BUILD_TYPE=Release `
     -DCMAKE_TOOLCHAIN_FILE=$Toolchain `
-    -DVCPKG_TARGET_TRIPLET=x64-windows `
+    -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+    -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
     -A x64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cmake --build $Build --config Release --target rocksmith_psarc --parallel
