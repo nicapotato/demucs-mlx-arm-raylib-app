@@ -22,6 +22,11 @@ if ($LASTEXITCODE -ne 0) {
     & $Python -m pip install pyinstaller
 }
 
+& $Python -c "from demucs.api import Separator, save_audio; print('demucs.api ok')"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "demucs.api is missing. Need demucs>=4.1.0 (4.0.1 has no api module)."
+}
+
 if (Test-Path $Dist) { Remove-Item -Recurse -Force $Dist }
 if (Test-Path $SpecWork) { Remove-Item -Recurse -Force $SpecWork }
 New-Item -ItemType Directory -Force -Path $SpecWork | Out-Null
@@ -45,6 +50,13 @@ try {
         --collect-all torch `
         --collect-all torchaudio `
         --collect-all demucs `
+        --collect-submodules demucs `
+        --hidden-import demucs `
+        --hidden-import demucs.api `
+        --hidden-import demucs.apply `
+        --hidden-import demucs.pretrained `
+        --hidden-import demucs.htdemucs `
+        --hidden-import demucs.audio `
         --hidden-import julius `
         --hidden-import lameenc `
         --hidden-import soundfile `

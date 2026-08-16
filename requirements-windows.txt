@@ -2,7 +2,7 @@
 # Install CUDA torch first from the PyTorch index, then this file:
 #   pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu121
 #   pip install -r requirements-windows.txt
-demucs==4.0.1
+demucs==4.1.0
 lameenc>=1.2
 soundfile
 pyinstaller
