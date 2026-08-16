@@ -279,8 +279,10 @@ jobs:
         uses: actions/cache@v4
         id: torch-model-cache
         with:
-          path: app/models/torch
-          key: htdemucs-6s-torch-${{ hashFiles('requirements-windows.txt', 'demucs_torch/separate.py') }}
+          path: |
+            app/models/torch
+            app/models/hf
+          key: htdemucs-6s-torch-hf-${{ hashFiles('requirements-windows.txt', 'demucs_torch/separate.py') }}
 
       - name: Prefetch official Demucs weights
         if: steps.torch-model-cache.outputs.cache-hit != 'true'

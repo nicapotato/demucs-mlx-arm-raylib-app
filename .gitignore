@@ -6,6 +6,7 @@ app/build/
 app/dist/
 app/models/*.pkl
 app/models/torch/
+app/models/hf/
 app/testdata/
 .DS_Store
 *.pyc

@@ -29,7 +29,7 @@ def _emit(event: str, **fields: tp.Any) -> None:
 
 
 def _apply_torch_home(cache_dir: tp.Optional[str]) -> None:
-    """Point torch hub downloads at a bundled / explicit cache (offline itch builds)."""
+    """Point torch hub + HuggingFace caches at a bundled / explicit cache."""
     if not cache_dir:
         cache_dir = os.environ.get("DEMUCS_TORCH_CACHE") or os.environ.get("DEMUCS_MLX_CACHE")
     if not cache_dir:
@@ -39,6 +39,11 @@ def _apply_torch_home(cache_dir: tp.Optional[str]) -> None:
     torch_home = root if hub.is_dir() else root / "torch"
     torch_home.mkdir(parents=True, exist_ok=True)
     os.environ["TORCH_HOME"] = str(torch_home)
+    # Demucs 4.1.0 loads named models from the HuggingFace hub first.
+    hf_home = root / "hf"
+    hf_home.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(hf_home)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hf_home / "hub")
 
 
 def _resolve_device() -> str:

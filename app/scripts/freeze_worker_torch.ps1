@@ -61,6 +61,9 @@ try {
         --hidden-import lameenc `
         --hidden-import soundfile `
         --hidden-import yaml `
+        --hidden-import huggingface_hub `
+        --hidden-import safetensors `
+        --hidden-import safetensors.torch `
         --hidden-import demucs_torch.separate `
         --exclude-module mlx `
         --exclude-module mlx_audio_io `

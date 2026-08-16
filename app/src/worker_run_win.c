@@ -112,6 +112,12 @@ int dmx_worker_run_job(const DmxWorkerConfig *cfg, DmxJob *job, DmxWorkerLive *l
     char torch_home[DMX_PATH_MAX];
     snprintf(torch_home, sizeof torch_home, "%s\\torch", cfg->model_cache_dir);
     SetEnvironmentVariableA("TORCH_HOME", torch_home);
+    char hf_home[DMX_PATH_MAX];
+    snprintf(hf_home, sizeof hf_home, "%s\\hf", cfg->model_cache_dir);
+    SetEnvironmentVariableA("HF_HOME", hf_home);
+    char hf_hub[DMX_PATH_MAX];
+    snprintf(hf_hub, sizeof hf_hub, "%s\\hf\\hub", cfg->model_cache_dir);
+    SetEnvironmentVariableA("HUGGINGFACE_HUB_CACHE", hf_hub);
   }
 
   char batch_buf[32];
