@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define strtok_r strtok_s
+#endif
+
 #ifndef DMX_APP_VERSION
 #define DMX_APP_VERSION "0.0.0"
 #endif

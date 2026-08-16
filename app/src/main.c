@@ -7,20 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 static void dmx_sleep_ms(int ms) {
-  Sleep((DWORD)ms);
+  WaitTime((double)ms / 1000.0);
 }
-#else
-#include <unistd.h>
-static void dmx_sleep_ms(int ms) {
-  usleep((useconds_t)ms * 1000);
-}
-#endif
 
 #ifndef DMX_APP_VERSION
 #define DMX_APP_VERSION "0.0.0"

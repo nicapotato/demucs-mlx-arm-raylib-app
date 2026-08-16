@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#define strdup _strdup
+#endif
+
 int dmx_psarc_extract_audio(const char *psarc_path, char *wav_out, size_t wav_out_sz, char **errmsg) {
   if (errmsg) {
     *errmsg = NULL;
