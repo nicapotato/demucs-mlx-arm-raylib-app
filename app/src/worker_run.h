@@ -21,8 +21,10 @@ typedef struct {
   volatile float progress_pct;
   char status_msg[DMX_MSG_MAX];
   char error_msg[DMX_MSG_MAX];
+  char device[16]; /* "cuda" / "cpu" from worker status JSON; empty until known */
   int exit_code;
   int pid;
+  void *os_handle; /* Windows process HANDLE; unused on POSIX */
 } DmxWorkerLive;
 
 void dmx_worker_config_defaults(DmxWorkerConfig *cfg);

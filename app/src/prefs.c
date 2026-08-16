@@ -6,16 +6,34 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#endif
+
 #define DMX_PREFS_DIR_NAME "demucs-mlx-app"
 #define DMX_PREFS_FILE_NAME "prefs.conf"
 #define DMX_PREFS_KEY "OUTPUT_DIR="
 
 static int prefs_dir(char *out, size_t out_sz) {
+  if (!out || out_sz < 8) {
+    return -1;
+  }
+#ifdef _WIN32
+  const char *appdata = getenv("APPDATA");
+  if (!appdata || !appdata[0]) {
+    return -1;
+  }
+  int n = snprintf(out, out_sz, "%s\\%s", appdata, DMX_PREFS_DIR_NAME);
+#else
   const char *home = getenv("HOME");
-  if (!home || !home[0] || !out || out_sz < 8) {
+  if (!home || !home[0]) {
     return -1;
   }
   int n = snprintf(out, out_sz, "%s/Library/Application Support/%s", home, DMX_PREFS_DIR_NAME);
+#endif
   if (n < 0 || (size_t)n >= out_sz) {
     return -1;
   }
@@ -39,9 +57,15 @@ static int ensure_prefs_dir(void) {
   if (prefs_dir(dir, sizeof dir) != 0) {
     return -1;
   }
+#ifdef _WIN32
+  if (_mkdir(dir) != 0 && errno != EEXIST) {
+    return -1;
+  }
+#else
   if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
     return -1;
   }
+#endif
   return 0;
 }
 

@@ -31,14 +31,7 @@ if(EXISTS "${DMX_PROJECT_CONF}")
 endif()
 message(STATUS "DemucsMLX version: ${DMX_APP_VERSION}")
 
-set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
-set(RS_VGMSTREAM_LIB "${RS_PREBUILT_DIR}/lib/libvgmstream.a")
 set(RS_PREBUILT_INCLUDE "${RS_PREBUILT_DIR}/include")
-if(NOT EXISTS "${RS_PREBUILT_LIB}" OR NOT EXISTS "${RS_VGMSTREAM_LIB}")
-  message(FATAL_ERROR
-    "Missing prebuilt rocksmith-psarc libs under ${RS_PREBUILT_DIR}/lib.\n"
-    "Refresh with: bash app/scripts/refresh_rocksmith_prebuilt.sh")
-endif()
 if(NOT EXISTS "${RS_PREBUILT_INCLUDE}/rocksmith_psarc.h")
   message(FATAL_ERROR "Missing ${RS_PREBUILT_INCLUDE}/rocksmith_psarc.h")
 endif()
@@ -52,52 +45,98 @@ endif()
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 
-# Prebuilt macOS arm64 static libs (no rocknroller checkout required).
-add_library(rocksmith_psarc STATIC IMPORTED GLOBAL)
-set_target_properties(rocksmith_psarc PROPERTIES
-  IMPORTED_LOCATION "${RS_PREBUILT_LIB}"
-  INTERFACE_INCLUDE_DIRECTORIES "${RS_PREBUILT_INCLUDE}"
-)
-
-add_library(libvgmstream STATIC IMPORTED GLOBAL)
-set_target_properties(libvgmstream PROPERTIES
-  IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
-)
-
-# Prefer static libs so the shipped .app does not depend on Homebrew dylibs
-# at /opt/homebrew/... (itch users do not have those installed).
-set(_dmx_find_lib_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-find_library(RS_VORBISFILE_LIB NAMES vorbisfile
-  PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
-find_library(RS_VORBIS_LIB NAMES vorbis
-  PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
-find_library(RS_OGG_LIB NAMES ogg
-  PATHS /opt/homebrew/opt/libogg/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
-set(CMAKE_FIND_LIBRARY_SUFFIXES "${_dmx_find_lib_suffixes}")
-unset(_dmx_find_lib_suffixes)
-if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
-  message(FATAL_ERROR "static libvorbis/libogg not found (brew install libvorbis libogg)")
+set(DMX_PSARC_FROM_SOURCE OFF)
+if(WIN32)
+  set(RS_WIN_LIB_DIR "${RS_PREBUILT_DIR}/lib-windows-x64")
+  set(RS_PREBUILT_LIB "${RS_WIN_LIB_DIR}/rocksmith_psarc.lib")
+  set(RS_VGMSTREAM_LIB "${RS_WIN_LIB_DIR}/vgmstream.lib")
+  set(RS_SRC_DIR "${APP_ROOT}/external/rocksmith-psarc")
+  if(DEFINED ENV{ROCKNROLLER_CHECKOUT} AND EXISTS "$ENV{ROCKNROLLER_CHECKOUT}/rocksmith-psarc/CMakeLists.txt")
+    set(RS_SRC_DIR "$ENV{ROCKNROLLER_CHECKOUT}/rocksmith-psarc")
+  endif()
+  if(EXISTS "${RS_PREBUILT_LIB}" AND EXISTS "${RS_VGMSTREAM_LIB}")
+    add_library(rocksmith_psarc STATIC IMPORTED GLOBAL)
+    set_target_properties(rocksmith_psarc PROPERTIES
+      IMPORTED_LOCATION "${RS_PREBUILT_LIB}"
+      INTERFACE_INCLUDE_DIRECTORIES "${RS_PREBUILT_INCLUDE}"
+    )
+    add_library(libvgmstream STATIC IMPORTED GLOBAL)
+    set_target_properties(libvgmstream PROPERTIES
+      IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
+    )
+  elseif(EXISTS "${RS_SRC_DIR}/CMakeLists.txt")
+    set(DMX_PSARC_FROM_SOURCE ON)
+    add_subdirectory("${RS_SRC_DIR}" "${CMAKE_BINARY_DIR}/rocksmith-psarc")
+  else()
+    message(FATAL_ERROR
+      "Missing Windows rocksmith-psarc libs under ${RS_WIN_LIB_DIR}.\n"
+      "Refresh with: pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1")
+  endif()
+  find_library(RS_VORBISFILE_LIB NAMES vorbisfile)
+  find_library(RS_VORBIS_LIB NAMES vorbis)
+  find_library(RS_OGG_LIB NAMES ogg)
+  if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
+    message(FATAL_ERROR "libvorbis not found (Windows: vcpkg install libogg:x64-windows libvorbis:x64-windows)")
+  endif()
+else()
+  set(RS_PREBUILT_LIB "${RS_PREBUILT_DIR}/lib/librocksmith_psarc.a")
+  set(RS_VGMSTREAM_LIB "${RS_PREBUILT_DIR}/lib/libvgmstream.a")
+  if(NOT EXISTS "${RS_PREBUILT_LIB}" OR NOT EXISTS "${RS_VGMSTREAM_LIB}")
+    message(FATAL_ERROR
+      "Missing prebuilt rocksmith-psarc libs under ${RS_PREBUILT_DIR}/lib.\n"
+      "Refresh with: bash app/scripts/refresh_rocksmith_prebuilt.sh")
+  endif()
+  add_library(rocksmith_psarc STATIC IMPORTED GLOBAL)
+  set_target_properties(rocksmith_psarc PROPERTIES
+    IMPORTED_LOCATION "${RS_PREBUILT_LIB}"
+    INTERFACE_INCLUDE_DIRECTORIES "${RS_PREBUILT_INCLUDE}"
+  )
+  add_library(libvgmstream STATIC IMPORTED GLOBAL)
+  set_target_properties(libvgmstream PROPERTIES
+    IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
+  )
+  # Prefer static libs so the shipped .app does not depend on Homebrew dylibs.
+  set(_dmx_find_lib_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+  find_library(RS_VORBISFILE_LIB NAMES vorbisfile
+    PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+  find_library(RS_VORBIS_LIB NAMES vorbis
+    PATHS /opt/homebrew/opt/libvorbis/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+  find_library(RS_OGG_LIB NAMES ogg
+    PATHS /opt/homebrew/opt/libogg/lib /opt/homebrew/lib /usr/local/lib /usr/lib)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES "${_dmx_find_lib_suffixes}")
+  unset(_dmx_find_lib_suffixes)
+  if(NOT RS_VORBISFILE_LIB OR NOT RS_VORBIS_LIB OR NOT RS_OGG_LIB)
+    message(FATAL_ERROR "static libvorbis/libogg not found (brew install libvorbis libogg)")
+  endif()
 endif()
-message(STATUS "libvorbisfile (static): ${RS_VORBISFILE_LIB}")
-message(STATUS "libvorbis (static): ${RS_VORBIS_LIB}")
-message(STATUS "libogg (static): ${RS_OGG_LIB}")
+message(STATUS "libvorbisfile: ${RS_VORBISFILE_LIB}")
+message(STATUS "libvorbis: ${RS_VORBIS_LIB}")
+message(STATUS "libogg: ${RS_OGG_LIB}")
 
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 add_subdirectory("${RAYLIB_DIR}" "${CMAKE_BINARY_DIR}/raylib-build")
+
+set(DMX_PLATFORM_SRC src/worker_run.c src/platform/threads_pthread.c)
+if(WIN32)
+  set(DMX_PLATFORM_SRC src/worker_run_win.c src/platform/threads_win32.c)
+endif()
 
 add_executable(demucs_mlx_app
   src/main.c
   src/app_state.c
   src/prefs.c
   src/job_queue.c
-  src/worker_run.c
+  src/worker_run_shared.c
   src/psarc_input.c
   src/ui.c
-  src/platform/threads_pthread.c
+  ${DMX_PLATFORM_SRC}
   "${TINYFD_DIR}/tinyfiledialogs.c"
 )
+if(WIN32)
+  set_target_properties(demucs_mlx_app PROPERTIES OUTPUT_NAME DemucsMLX)
+endif()
 
 target_include_directories(demucs_mlx_app PRIVATE
   "${APP_ROOT}/src"
@@ -130,6 +169,11 @@ if(APPLE)
     "-framework AudioToolbox"
     "-framework CoreVideo"
   )
+endif()
+
+if(WIN32)
+  target_link_libraries(demucs_mlx_app PRIVATE opengl32 gdi32 winmm comdlg32 ole32)
+  target_compile_definitions(demucs_mlx_app PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 if(NOT MSVC)

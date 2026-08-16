@@ -16,6 +16,7 @@ REF ?= $(shell git branch --show-current 2>/dev/null)
 # CI / release toggles (workflow_dispatch inputs). Override e.g. PUBLISH_ITCH=false
 PUBLISH_ITCH ?= true
 PUBLISH_GH_RELEASE ?= true
+BUILD_PLATFORM ?= all
 
 .PHONY: run build bundle verify-mp3 verify-psarc models worker clean \
 	ci ci-watch release release-watch
@@ -36,6 +37,7 @@ ci:
 	gh $(GH_R) workflow run "$(CI_WORKFLOW)" \
 		$(if $(REF),-r "$(REF)",) \
 		-f publish_itch="$(PUBLISH_ITCH)" \
+		-f build_platform="$(BUILD_PLATFORM)" \
 		$(if $(VERSION),-f version="$(VERSION)",)
 
 # Full release: bundle + itch + GitHub Release (version from project.conf unless VERSION=).
@@ -50,6 +52,7 @@ release:
 		$(if $(REF),-r "$(REF)",) \
 		-f publish_itch="$(PUBLISH_ITCH)" \
 		-f publish_gh_release="$(PUBLISH_GH_RELEASE)" \
+		-f build_platform="$(BUILD_PLATFORM)" \
 		$(if $(VERSION),-f version="$(VERSION)",)
 
 # Dispatch then attach to the newest run log (same workflow file).
