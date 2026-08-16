@@ -9,8 +9,12 @@ void dmx_queue_init(DmxJobQueue *q) {
 }
 
 static void basename_no_ext(const char *path, char *out, size_t out_sz, const char *drop_ext) {
-  const char *base = strrchr(path, '/');
-  base = base ? base + 1 : path;
+  const char *base = path;
+  for (const char *p = path; *p; ++p) {
+    if (*p == '/' || *p == '\\') {
+      base = p + 1;
+    }
+  }
   snprintf(out, out_sz, "%s", base);
   size_t n = strlen(out);
   size_t el = strlen(drop_ext);

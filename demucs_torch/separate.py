@@ -93,7 +93,12 @@ def _separate_one(
     track_name: tp.Optional[str],
     verbose: bool,
 ) -> Path:
-    stem_name = track_name if track_name else path.stem
+    raw = track_name if track_name else path.stem
+    stem_name = Path(raw).name
+    if path.suffix and stem_name.lower().endswith(path.suffix.lower()):
+        stem_name = Path(stem_name).stem
+    if not stem_name or stem_name in (".", ".."):
+        stem_name = path.stem
     track_out = out_dir / stem_name
     track_out.mkdir(parents=True, exist_ok=True)
     ext = "mp3" if fmt == "mp3" else "wav"
