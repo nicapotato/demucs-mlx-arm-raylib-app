@@ -1,4 +1,5 @@
 #include "app_state.h"
+#include "platform/threads.h"
 #include "ui.h"
 #include "util/resource_dir.h"
 
@@ -6,10 +7,6 @@
 
 #include <stdio.h>
 #include <string.h>
-
-static void dmx_sleep_ms(int ms) {
-  WaitTime((double)ms / 1000.0);
-}
 
 #ifndef DMX_APP_VERSION
 #define DMX_APP_VERSION "0.0.0"

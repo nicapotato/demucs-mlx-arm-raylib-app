@@ -52,3 +52,10 @@ void dmx_thread_join(DmxThread *t) {
   CloseHandle(t->h);
   free(t);
 }
+
+void dmx_sleep_ms(int ms) {
+  if (ms < 0) {
+    ms = 0;
+  }
+  Sleep((DWORD)ms);
+}

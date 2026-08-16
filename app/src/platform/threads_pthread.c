@@ -1,6 +1,7 @@
 #include "platform/threads.h"
 #include <pthread.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 struct DmxThread {
   pthread_t tid;
@@ -25,4 +26,11 @@ void dmx_thread_join(DmxThread *t) {
   }
   pthread_join(t->tid, NULL);
   free(t);
+}
+
+void dmx_sleep_ms(int ms) {
+  if (ms < 0) {
+    ms = 0;
+  }
+  usleep((useconds_t)ms * 1000);
 }

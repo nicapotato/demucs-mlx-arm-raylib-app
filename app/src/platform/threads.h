@@ -5,5 +5,6 @@ typedef struct DmxThread DmxThread;
 
 int dmx_thread_spawn(DmxThread **out, void *(*start_routine)(void *), void *arg);
 void dmx_thread_join(DmxThread *t);
+void dmx_sleep_ms(int ms);
 
 #endif
