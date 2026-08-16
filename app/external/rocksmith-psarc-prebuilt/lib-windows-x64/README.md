@@ -16,5 +16,5 @@ $env:ROCKNROLLER_CHECKOUT = "C:\path\to\rocknroller"
 pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1
 ```
 
-Until these files are committed, Windows CMake will build from
-`app/external/rocksmith-psarc` (local symlink) or `ROCKNROLLER_CHECKOUT` if present.
+Until these files are committed, Windows CMake builds
+`app/external/rocksmith-psarc-src` after `bash app/scripts/vendor_vgmstream.sh`.

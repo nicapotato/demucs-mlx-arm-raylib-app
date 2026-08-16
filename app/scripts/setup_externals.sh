@@ -16,11 +16,17 @@ if [[ ! -f "${EXT}/rocksmith-psarc-prebuilt/include/rocksmith_psarc.h" ]]; then
   echo "ERROR: missing ${EXT}/rocksmith-psarc-prebuilt/include/rocksmith_psarc.h" >&2
   exit 1
 fi
-uname_s="$(uname -s 2>/dev/null || echo unknown)"
-if [[ "$uname_s" == MINGW* || "$uname_s" == MSYS* || "$uname_s" == CYGWIN* ]]; then
+is_windows=0
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*) is_windows=1 ;;
+esac
+
+if [[ "$is_windows" -eq 1 ]]; then
   if [[ ! -f "${EXT}/rocksmith-psarc-prebuilt/lib-windows-x64/rocksmith_psarc.lib" &&
+        ! -f "${EXT}/rocksmith-psarc-src/CMakeLists.txt" &&
         ! -f "${EXT}/rocksmith-psarc/CMakeLists.txt" ]]; then
-    echo "WARNING: no Windows rocksmith-psarc prebuilt or source; CMake will fail unless ROCKNROLLER_CHECKOUT is set" >&2
+    echo "ERROR: no Windows rocksmith-psarc prebuilt or source under ${EXT}" >&2
+    exit 1
   fi
 else
   if [[ ! -f "${EXT}/rocksmith-psarc-prebuilt/lib/librocksmith_psarc.a" ||
@@ -32,6 +38,9 @@ else
 fi
 
 bash "${ROOT}/scripts/vendor_raylib.sh"
+if [[ "$is_windows" -eq 1 && ! -f "${EXT}/rocksmith-psarc-prebuilt/lib-windows-x64/rocksmith_psarc.lib" ]]; then
+  bash "${ROOT}/scripts/vendor_vgmstream.sh"
+fi
 
 test -f "${EXT}/raylib-master/CMakeLists.txt"
-echo "externals ready (raylib + prebuilt rocksmith-psarc)"
+echo "externals ready (raylib + rocksmith-psarc)"

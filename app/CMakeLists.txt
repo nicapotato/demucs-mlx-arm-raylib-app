@@ -6,7 +6,8 @@ if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQU
   set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version for DemucsMLX")
 endif()
 
-project(demucs_mlx_app LANGUAGES C)
+# CXX is required when Windows builds vgmstream from source (libvgmstream).
+project(demucs_mlx_app LANGUAGES C CXX)
 enable_testing()
 
 set(CMAKE_C_STANDARD 17)
@@ -50,9 +51,12 @@ if(WIN32)
   set(RS_WIN_LIB_DIR "${RS_PREBUILT_DIR}/lib-windows-x64")
   set(RS_PREBUILT_LIB "${RS_WIN_LIB_DIR}/rocksmith_psarc.lib")
   set(RS_VGMSTREAM_LIB "${RS_WIN_LIB_DIR}/vgmstream.lib")
-  set(RS_SRC_DIR "${APP_ROOT}/external/rocksmith-psarc")
+  set(RS_SRC_DIR "${APP_ROOT}/external/rocksmith-psarc-src")
   if(DEFINED ENV{ROCKNROLLER_CHECKOUT} AND EXISTS "$ENV{ROCKNROLLER_CHECKOUT}/rocksmith-psarc/CMakeLists.txt")
     set(RS_SRC_DIR "$ENV{ROCKNROLLER_CHECKOUT}/rocksmith-psarc")
+  endif()
+  if(EXISTS "${APP_ROOT}/external/rocksmith-psarc/CMakeLists.txt")
+    set(RS_SRC_DIR "${APP_ROOT}/external/rocksmith-psarc")
   endif()
   if(EXISTS "${RS_PREBUILT_LIB}" AND EXISTS "${RS_VGMSTREAM_LIB}")
     add_library(rocksmith_psarc STATIC IMPORTED GLOBAL)
@@ -65,12 +69,18 @@ if(WIN32)
       IMPORTED_LOCATION "${RS_VGMSTREAM_LIB}"
     )
   elseif(EXISTS "${RS_SRC_DIR}/CMakeLists.txt")
+    if(NOT EXISTS "${RS_SRC_DIR}/external/vgmstream/CMakeLists.txt")
+      message(FATAL_ERROR
+        "Missing vgmstream at ${RS_SRC_DIR}/external/vgmstream.\n"
+        "Run: bash app/scripts/vendor_vgmstream.sh")
+    endif()
     set(DMX_PSARC_FROM_SOURCE ON)
+    set(RS_VGM_BINARY_DIR "${CMAKE_BINARY_DIR}/vgmstream-build" CACHE PATH "vgmstream build dir" FORCE)
     add_subdirectory("${RS_SRC_DIR}" "${CMAKE_BINARY_DIR}/rocksmith-psarc")
   else()
     message(FATAL_ERROR
-      "Missing Windows rocksmith-psarc libs under ${RS_WIN_LIB_DIR}.\n"
-      "Refresh with: pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1")
+      "Missing Windows rocksmith-psarc libs under ${RS_WIN_LIB_DIR} and no source at ${RS_SRC_DIR}.\n"
+      "Run: bash app/scripts/vendor_vgmstream.sh")
   endif()
   find_library(RS_VORBISFILE_LIB NAMES vorbisfile)
   find_library(RS_VORBIS_LIB NAMES vorbis)

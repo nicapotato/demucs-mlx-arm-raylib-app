@@ -230,7 +230,13 @@ jobs:
           "%GITHUB_WORKSPACE%\vcpkg\vcpkg.exe" install zlib:x64-windows libogg:x64-windows libvorbis:x64-windows
           if errorlevel 1 exit /b 1
 
-      - name: Wire externals (raylib)
+      - name: Restore vgmstream checkout
+        uses: actions/cache@v4
+        with:
+          path: app/external/rocksmith-psarc-src/external/vgmstream
+          key: vgmstream-${{ hashFiles('app/scripts/vendor_vgmstream.sh') }}
+
+      - name: Wire externals (raylib + vgmstream)
         shell: bash
         run: |
           set -euo pipefail
@@ -251,6 +257,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="${VCPKG_ROOT}/installed/x64-windows/bin:${PATH}"
           EXE="app/build/Release/DemucsMLX.exe"
           test -f "$EXE"
           "$EXE" --version

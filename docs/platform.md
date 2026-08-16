@@ -56,8 +56,9 @@ VRAM: default `htdemucs_6s` segments want about 5–7 GB. 3–4 GB cards may OOM
 Unsigned PyInstaller onedirs trip SmartScreen (“Windows protected your PC”) the same
 way unsigned Mac `.app` bundles trip Gatekeeper. Right-click → Open / More info → Run anyway.
 
-Windows PSARC libs: generate once with `pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1`
-and commit `app/external/rocksmith-psarc-prebuilt/lib-windows-x64/*.lib`.
+Windows PSARC: CI builds `app/external/rocksmith-psarc-src` plus a public vgmstream
+clone (`app/scripts/vendor_vgmstream.sh`). Optional MSVC `.lib` prebuilts can still
+be generated with `pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1`.
 
 ## Linux
 
