@@ -29,7 +29,7 @@ concurrency:
 
 env:
   ITCH_USER: nicapotato
-  ITCH_GAME: demucs-mlx-app-dev
+  ITCH_GAME: demucs-mlx-app
   PYTHON_VERSION: "3.12"
 
 jobs:
