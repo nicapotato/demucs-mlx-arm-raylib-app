@@ -5,7 +5,7 @@ BUILD := $(ROOT)/build
 BIN := $(BUILD)/demucs_mlx_app
 PYTHON := $(REPO)/.venv/bin/python
 
-.PHONY: all configure build run clean bundle worker models verify-mp3 verify-psarc externals version
+.PHONY: all configure build run clean bundle worker worker-torch models verify-mp3 verify-psarc externals version
 
 all: build
 
@@ -58,6 +58,10 @@ models:
 
 worker:
 	bash "$(ROOT)/scripts/freeze_worker.sh"
+
+# Windows-only: official Demucs + CUDA torch worker (run in pwsh).
+worker-torch:
+	pwsh -File "$(ROOT)/scripts/freeze_worker_torch.ps1"
 
 bundle: build worker
 	bash "$(ROOT)/scripts/build_app.sh"

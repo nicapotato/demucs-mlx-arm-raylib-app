@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 typedef struct {
   DmxApp *app;
@@ -218,7 +217,7 @@ void dmx_app_request_cancel(DmxApp *app) {
 
 static void cleanup_temp(DmxJob *job) {
   if (job && job->owns_temp_audio && job->prepared_audio[0]) {
-    unlink(job->prepared_audio);
+    remove(job->prepared_audio);
     job->prepared_audio[0] = '\0';
     job->owns_temp_audio = 0;
   }

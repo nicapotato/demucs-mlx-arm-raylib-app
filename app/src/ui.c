@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define strtok_r strtok_s
+#endif
+
 #ifndef DMX_APP_VERSION
 #define DMX_APP_VERSION "0.0.0"
 #endif
@@ -270,11 +274,19 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
     Rectangle src = {0, 0, (float)app->logo_tex.width, (float)app->logo_tex.height};
     Rectangle dst = {24, 16, draw_w, draw_h};
     DrawTexturePro(app->logo_tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
-    DrawText("Apple Silicon stem separator", 24, (int)(16 + draw_h + 6), 16,
-             (Color){160, 160, 168, 255});
+#ifdef _WIN32
+    const char *subtitle = "Windows stem separator (Demucs + CUDA)";
+#else
+    const char *subtitle = "Apple Silicon stem separator";
+#endif
+    DrawText(subtitle, 24, (int)(16 + draw_h + 6), 16, (Color){160, 160, 168, 255});
   } else {
     DrawText("DemucsMLX", 24, 20, 32, (Color){240, 236, 228, 255});
+#ifdef _WIN32
+    DrawText("Windows stem separator (Demucs + CUDA)", 24, 56, 16, (Color){160, 160, 168, 255});
+#else
     DrawText("Apple Silicon stem separator", 24, 56, 16, (Color){160, 160, 168, 255});
+#endif
   }
 
   DmxUiLayout L = dmx_ui_layout(app, screen_w);
@@ -326,14 +338,27 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
   }
   DrawText(TextFormat("Worker: %s", app->worker_cfg.python_or_worker), 24, (int)L.info_y + 30, 14,
            (Color){120, 120, 128, 255});
-  if (app->worker_cfg.model_cache_dir[0]) {
+  if (app->live.device[0]) {
+    const char *dev = app->live.device;
+    Color dev_c = (strcmp(dev, "cpu") == 0) ? (Color){210, 140, 70, 255} : (Color){120, 120, 128, 255};
+    if (strcmp(dev, "cpu") == 0) {
+      DrawText("Device: CPU (slow — NVIDIA CUDA recommended)", 24, (int)L.info_y + 48, 14, dev_c);
+    } else {
+      DrawText(TextFormat("Device: %s", dev), 24, (int)L.info_y + 48, 14, dev_c);
+    }
+  } else if (app->worker_cfg.model_cache_dir[0]) {
     DrawText(TextFormat("Models: %s", app->worker_cfg.model_cache_dir), 24, (int)L.info_y + 48, 14,
              (Color){120, 120, 128, 255});
   }
 
   DrawRectangleRec(L.drop, (Color){28, 32, 40, 255});
   DrawRectangleLinesEx(L.drop, 2.0f, (Color){80, 90, 110, 255});
-  const char *hint = busy ? "File dialog open - finish or cancel in Finder"
+#ifdef _WIN32
+  const char *busy_hint = "File dialog open - finish or cancel in the picker";
+#else
+  const char *busy_hint = "File dialog open - finish or cancel in Finder";
+#endif
+  const char *hint = busy ? busy_hint
                           : (out_ok ? "Drop MP3 / WAV / OGG / FLAC / PSARC here - then press Start"
                                     : "Drop files here - pick output folder and press Start");
   int tw = MeasureText(hint, 18);

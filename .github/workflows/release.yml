@@ -18,6 +18,15 @@ on:
         required: false
         default: true
         type: boolean
+      build_platform:
+        description: "macos / windows / all"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
 
 concurrency:
   group: release-${{ github.ref }}
@@ -28,7 +37,7 @@ permissions:
 
 env:
   ITCH_USER: nicapotato
-  ITCH_GAME: demucs-mlx-app
+  ITCH_GAME: demucs-mlx-app-dev
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -61,6 +70,7 @@ jobs:
     runs-on: macos-latest
     needs: read-version
     timeout-minutes: 120
+    if: contains(fromJSON('["macos","all"]'), github.event.inputs.build_platform)
     env:
       BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
       VERSION: ${{ needs.read-version.outputs.version }}
@@ -184,8 +194,213 @@ jobs:
             --userversion "${VERSION}"
           echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:macos-arm64 @ ${VERSION}"
 
+  build-and-publish-windows:
+    runs-on: windows-latest
+    needs: read-version
+    timeout-minutes: 180
+    if: contains(fromJSON('["windows","all"]'), github.event.inputs.build_platform)
+    outputs:
+      gh_release_ok: ${{ steps.package.outputs.gh_release_ok }}
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      VERSION: ${{ needs.read-version.outputs.version }}
+      TAG: ${{ needs.read-version.outputs.tag }}
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - name: Checkout demucs-mlx-arm-raylib-app
+        uses: actions/checkout@v4
+
+      - name: Clone and bootstrap vcpkg
+        shell: cmd
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "%GITHUB_WORKSPACE%\vcpkg"
+          call "%GITHUB_WORKSPACE%\vcpkg\bootstrap-vcpkg.bat"
+
+      - name: Restore vcpkg downloads and installed trees
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg/downloads
+            ${{ github.workspace }}/vcpkg/installed
+          key: vcpkg-${{ runner.os }}-x64-dmx-static-v1
+
+      - name: Install vcpkg ports
+        shell: cmd
+        run: |
+          "%GITHUB_WORKSPACE%\vcpkg\vcpkg.exe" install zlib:x64-windows-static libogg:x64-windows-static libvorbis:x64-windows-static
+          if errorlevel 1 exit /b 1
+
+      - name: Restore vgmstream checkout
+        uses: actions/cache@v4
+        with:
+          path: app/external/rocksmith-psarc-src/external/vgmstream
+          key: vgmstream-${{ hashFiles('app/scripts/vendor_vgmstream.sh') }}
+
+      - name: Wire externals (raylib + vgmstream)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x app/scripts/*.sh
+          bash app/scripts/setup_externals.sh
+
+      - name: Configure and build GUI (CMake Release, MSVC + vcpkg)
+        shell: cmd
+        working-directory: app
+        run: |
+          set "TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
+          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=%TOOLCHAIN% -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -A x64
+          if errorlevel 1 exit /b 1
+          cmake --build build --config Release --parallel -- /verbosity:minimal /nologo
+          if errorlevel 1 exit /b 1
+
+      - name: Smoke --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXE="app/build/Release/DemucsMLX.exe"
+          test -f "$EXE"
+          "$EXE" --version
+          "$EXE" --version | grep -F "${VERSION}"
+
+      - name: Assert GUI is /MT (no VC++ redist DLLs)
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -find "**\dumpbin.exe" | Select-Object -First 1
+          if (-not $dumpbin) { Write-Error "dumpbin.exe not found"; exit 1 }
+          $exe = "app\build\Release\DemucsMLX.exe"
+          $deps = & $dumpbin /DEPENDENTS $exe | Out-String
+          Write-Host $deps
+          foreach ($dll in @("VCRUNTIME140.dll", "VCRUNTIME140_1.dll", "MSVCP140.dll", "MSVCP140_1.dll", "MSVCP140_2.dll")) {
+            if ($deps -match [regex]::Escape($dll)) {
+              Write-Error "DemucsMLX.exe still depends on $dll; expected static /MT"
+              exit 1
+            }
+          }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install CUDA torch + Demucs + freeze deps
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu121
+          python -m pip install -r requirements-windows.txt
+          $env:PYTHONPATH = (Get-Location).Path
+
+      - name: Restore Demucs torch checkpoint cache
+        uses: actions/cache@v4
+        id: torch-model-cache
+        with:
+          path: |
+            app/models/torch
+            app/models/hf
+          key: htdemucs-6s-torch-hf-${{ hashFiles('requirements-windows.txt', 'demucs_torch/separate.py') }}
+
+      - name: Prefetch official Demucs weights
+        if: steps.torch-model-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $env:DEMUCS_TORCH_PYTHON = (Get-Command python).Source
+          pwsh -File app/scripts/prefetch_torch_models.ps1
+
+      - name: Freeze torch worker (PyInstaller)
+        shell: pwsh
+        run: |
+          $env:DEMUCS_TORCH_PYTHON = (Get-Command python).Source
+          pwsh -File app/scripts/freeze_worker_torch.ps1
+
+      - name: Package Windows zip
+        id: package
+        shell: pwsh
+        run: |
+          pwsh -File app/scripts/build_windows.ps1
+          if (-not (Test-Path "app/dist/DemucsMLX-windows-x86_64.zip")) { exit 1 }
+
+      - name: Install ffmpeg
+        shell: cmd
+        run: choco install ffmpeg --no-progress -y
+
+      - name: Smoke bundled app headless (5s tone -> 6 stems, CPU)
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          DEMUCS_DEVICE: cpu
+        run: |
+          $in = Join-Path $env:TEMP "dmx_ci_in"
+          $out = Join-Path $env:TEMP "dmx_ci_out"
+          New-Item -ItemType Directory -Force -Path $in, $out | Out-Null
+          ffmpeg -y -hide_banner -loglevel error -f lavfi -i "sine=frequency=440:duration=5" -ac 2 -ar 44100 "$in\tone5s.mp3"
+          $env:DEMUCS_DEVICE = "cpu"
+          & "app\dist\DemucsMLX\DemucsMLX.exe" --headless "$in\tone5s.mp3" --out $out --mp3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($s in @("drums","bass","other","vocals","guitar","piano")) {
+            $p = Join-Path $out "tone5s\$s.mp3"
+            if (-not (Test-Path $p)) { Write-Error "missing $p"; exit 1 }
+          }
+          Get-ChildItem "$out\tone5s"
+
+      - name: Prepare zip artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp app/dist/DemucsMLX-windows-x86_64.zip release-assets/
+          (
+            cd release-assets
+            sha256sum DemucsMLX-windows-x86_64.zip | tee DemucsMLX-windows-x86_64.zip.sha256
+          )
+
+      - name: Upload Windows zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DemucsMLX-windows-x86_64-zip
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Setup butler
+        if: github.event.inputs.publish_itch == 'true'
+        uses: remarkablegames/setup-butler@v2
+        with:
+          butler-version: LATEST
+
+      - name: Push to itch.io (Windows)
+        if: github.event.inputs.publish_itch == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BUTLER_API_KEY:-}" ]; then
+            echo "ERROR: BUTLER_API_KEY secret is not set" >&2
+            exit 1
+          fi
+          butler push release-assets/DemucsMLX-windows-x86_64.zip \
+            "${ITCH_USER}/${ITCH_GAME}:windows-x86-64" \
+            --userversion "${VERSION}"
+          echo "Pushed to itch.io ${ITCH_USER}/${ITCH_GAME}:windows-x86-64 @ ${VERSION}"
+
+  publish-gh-release:
+    runs-on: ubuntu-latest
+    needs: [read-version, build-and-publish, build-and-publish-windows]
+    if: >-
+      github.event.inputs.publish_gh_release == 'true' &&
+      !cancelled() &&
+      (needs.build-and-publish.result == 'success' ||
+       needs.build-and-publish.result == 'skipped') &&
+      (needs.build-and-publish-windows.result == 'success' ||
+       needs.build-and-publish-windows.result == 'skipped') &&
+      (needs.build-and-publish.result == 'success' ||
+       needs.build-and-publish-windows.result == 'success')
+    env:
+      TAG: ${{ needs.read-version.outputs.tag }}
+      VERSION: ${{ needs.read-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Guard duplicate tag
-        if: github.event.inputs.publish_gh_release == 'true'
         run: |
           set -euo pipefail
           git fetch --tags origin
@@ -195,8 +410,34 @@ jobs:
           fi
           echo "Tag ${TAG} is available"
 
+      - name: Download macOS zip
+        if: needs.build-and-publish.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: DemucsMLX-mac-arm64-zip
+          path: release-assets
+
+      - name: Download Windows zip
+        if: needs.build-and-publish-windows.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: DemucsMLX-windows-x86_64-zip
+          path: release-assets
+
+      - name: Drop Windows zip if over GitHub 2GB asset cap
+        if: needs.build-and-publish-windows.result == 'success'
+        run: |
+          set -euo pipefail
+          WIN="release-assets/DemucsMLX-windows-x86_64.zip"
+          if [ -f "$WIN" ]; then
+            BYTES=$(stat -c%s "$WIN")
+            if [ "$BYTES" -ge 2147483648 ]; then
+              echo "Windows zip is ${BYTES} bytes (>= 2 GiB). Skipping GitHub Release asset; itch.io is the storefront."
+              rm -f "$WIN" "${WIN}.sha256"
+            fi
+          fi
+
       - name: Create GitHub Release
-        if: github.event.inputs.publish_gh_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
@@ -205,8 +446,10 @@ jobs:
           generate_release_notes: true
           body: |
             ## Downloads
-            - **macOS Apple Silicon:** `DemucsMLX-mac-arm64.zip`
+            - **macOS Apple Silicon:** `DemucsMLX-mac-arm64.zip` (MLX + Metal)
+            - **Windows x64:** `DemucsMLX-windows-x86_64.zip` (official Demucs + CUDA; omitted here if over 2 GB — use itch.io)
 
             Also on itch.io: https://nicapotato.itch.io/demucs-mlx-app
+            Channels: `macos-arm64`, `windows-x86-64`
           files: |
             release-assets/*

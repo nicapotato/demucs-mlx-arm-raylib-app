@@ -1,0 +1,4 @@
+build*/
+.vgmstream-cmake-build*/
+external/vgmstream
+tests/fixtures//

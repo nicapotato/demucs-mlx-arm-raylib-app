@@ -6,7 +6,7 @@ demucs-mlx is a fast, native Apple Silicon port of Meta's [Demucs](https://githu
 
 ## DemucsMLX (this fork)
 
-This fork adds a standalone Apple Silicon GUI under [`app/`](app/). Version: [`project.conf`](project.conf).
+This fork adds a standalone GUI under [`app/`](app/) (Apple Silicon via MLX; Windows x86_64 via official Demucs + CUDA). Version: [`project.conf`](project.conf).
 
 ```bash
 make run          # dev GUI (uses .venv worker)
@@ -31,7 +31,8 @@ Distribution is **itch.io + GitHub Release assets** (no S3 for the large zip). S
 ## Requirements
 
 - Python >= 3.10
-- macOS with Apple Silicon (recommended) or Linux with MLX
+- macOS with Apple Silicon (MLX) or Windows x86_64 (official Demucs + NVIDIA CUDA; CPU fallback)
+- Linux with MLX (CLI only)
 
 ## Install
 

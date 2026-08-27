@@ -1,6 +1,6 @@
 # DemucsMLX
 
-Mac Apple Silicon stem separator GUI. Wraps [demucs-mlx](https://github.com/ssmall256/demucs-mlx) with a raylib front-end, PSARC extract via `rocksmith-psarc`, and rocknroller-compatible 6-stem MP3 output.
+Stem separator GUI. Apple Silicon uses [demucs-mlx](https://github.com/ssmall256/demucs-mlx) (MLX + Metal). Windows x86_64 uses official Meta Demucs + PyTorch CUDA. Same raylib front-end, PSARC extract via `rocksmith-psarc`, and rocknroller-compatible 6-stem MP3 output.
 
 Version is owned by [`project.conf`](../project.conf) (`VERSION=x.y.z`).
 
@@ -10,7 +10,7 @@ Version is owned by [`project.conf`](../project.conf) (`VERSION=x.y.z`).
 - Default model: `htdemucs_6s` (drums, bass, other, vocals, guitar, piano)
 - Output: MP3 (default) or WAV to a user-selected folder
 - Background worker subprocess (GUI stays responsive)
-- Standalone `.app` bundle with frozen MLX worker + bundled weights
+- Standalone `.app` (macOS arm64, frozen MLX worker) or Windows zip (frozen Demucs + CUDA torch)
 
 ## Dev (on this machine)
 
@@ -42,7 +42,11 @@ Env overrides:
 | `DEMUCS_MLX_PYTHON` | Dev python that has `demucs_mlx` |
 | `DEMUCS_MLX_WORKER` | Path to frozen worker binary |
 | `DEMUCS_MLX_CACHE` | Directory with `htdemucs_6s_mlx.pkl` |
-| `ROCKNROLLER_CHECKOUT` | Only for refreshing prebuilt libs via `app/scripts/refresh_rocksmith_prebuilt.sh` |
+| `ROCKNROLLER_CHECKOUT` | Refresh prebuilt PSARC libs (`refresh_rocksmith_prebuilt.sh` / `_windows.ps1`) |
+| `DEMUCS_TORCH_PYTHON` | Windows: python with official `demucs` + torch |
+| `DEMUCS_TORCH_WORKER` | Windows: frozen `demucs_torch_worker.exe` |
+| `DEMUCS_TORCH_CACHE` | Windows: official Demucs checkpoint cache (`models/torch`) |
+| `DEMUCS_DEVICE` | Windows: `cuda` or `cpu` (default: cuda if available) |
 
 ## Standalone bundle (local)
 
@@ -54,12 +58,28 @@ make -C app bundle
 
 Gatekeeper: unsigned / ad-hoc signed. Users may need right-click -> Open the first time.
 
+### Windows zip (local, on a Windows box)
+
+```powershell
+# vcpkg zlib/ogg/vorbis + VS, then:
+cmake -B app/build -S app -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -A x64
+cmake --build app/build --config Release --parallel
+python -m pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu121
+python -m pip install -r requirements-windows.txt
+pwsh app/scripts/prefetch_torch_models.ps1
+pwsh app/scripts/freeze_worker_torch.ps1
+pwsh app/scripts/build_windows.ps1
+# → app/dist/DemucsMLX-windows-x86_64.zip
+```
+
+NVIDIA recommended. CPU works but is slow. SmartScreen may warn on the unsigned zip (same class of issue as Gatekeeper).
+
 ## Distribution (itch + GitHub Release)
 
 Large binaries are **not** published to S3. Releases go to:
 
-1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` channel via butler) — from **ci** or **release**
-2. **GitHub Release assets** — zip + sha256 on a `v*` tag — **release** workflow only
+1. **itch.io** — https://nicapotato.itch.io/demucs-mlx-app (`macos-arm64` and `windows-x86-64`) — from **ci** or **release**
+2. **GitHub Release assets** — zip + sha256 on a `v*` tag — **release** workflow only. The Windows CUDA zip is omitted from GitHub if it is 2 GB or larger (itch.io is the storefront).
 
 Both [ci.yml](../.github/workflows/ci.yml) and [release.yml](../.github/workflows/release.yml) are **workflow_dispatch only** (no push/PR/tag triggers).
 
@@ -69,20 +89,22 @@ Both [ci.yml](../.github/workflows/ci.yml) and [release.yml](../.github/workflow
 |--------|---------|
 | `BUTLER_API_KEY` | itch.io API key |
 
-PSARC support uses checked-in arm64 static libs under [`app/external/rocksmith-psarc-prebuilt/`](external/rocksmith-psarc-prebuilt/). Refresh after rocksmith-psarc changes:
+PSARC support uses checked-in prebuilt libs under [`app/external/rocksmith-psarc-prebuilt/`](external/rocksmith-psarc-prebuilt/). Refresh after rocksmith-psarc changes:
 
 ```bash
 bash app/scripts/refresh_rocksmith_prebuilt.sh
+pwsh app/scripts/refresh_rocksmith_prebuilt_windows.ps1
 ```
 
 ### Run CI (tests + itch, no git tag)
 
-From repo root (branch must be pushed). Builds the macOS zip, runs headless smoke, pushes to itch.io. Does **not** create a git tag or GitHub Release.
+From repo root (branch must be pushed). Builds platform zips, runs headless smoke, pushes to itch.io. Does **not** create a git tag or GitHub Release.
 
 ```bash
 make ci                   # or: make ci-watch
 make ci PUBLISH_ITCH=false
 make ci VERSION=0.1.1
+make ci BUILD_PLATFORM=windows
 ```
 
 Or Actions → **ci** → Run workflow.
