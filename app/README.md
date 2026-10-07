@@ -125,7 +125,9 @@ Or Actions → **release** → Run workflow.
 
 ## Rocknroller layout
 
-PSARC input `Foo_p.psarc` writes:
+PSARC input accepts PC (`*_p.psarc`) and Mac (`*_m.psarc`). The stem folder is the filename without `.psarc`, so the two stay separate and rocknroller can match each one.
+
+`Foo_p.psarc` writes:
 
 ```
 {output_dir}/Foo_p/drums.mp3
@@ -133,5 +135,7 @@ PSARC input `Foo_p.psarc` writes:
 ...
 {output_dir}/Foo_p/piano.mp3
 ```
+
+`Foo_m.psarc` writes `{output_dir}/Foo_m/` with the same six files.
 
 Point rocknroller's stems root at the same output folder.

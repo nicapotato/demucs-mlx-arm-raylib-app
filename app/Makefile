@@ -5,7 +5,7 @@ BUILD := $(ROOT)/build
 BIN := $(BUILD)/demucs_mlx_app
 PYTHON := $(REPO)/.venv/bin/python
 
-.PHONY: all configure build run clean bundle worker worker-torch models verify-mp3 verify-psarc externals version
+.PHONY: all configure build run clean bundle worker worker-torch models verify-mp3 verify-psarc verify-psarc-mac externals version
 
 all: build
 
@@ -51,6 +51,17 @@ verify-psarc: build
 	@ls -la "$(ROOT)/build/verify_out/Parquet-Courts_Freebird-II_v1_p/"
 	@test -f "$(ROOT)/build/verify_out/Parquet-Courts_Freebird-II_v1_p/guitar.mp3"
 	@echo "verify-psarc OK"
+
+# Optional Mac PSARC. Usage: make verify-psarc-mac PSARC_M=/path/song_m.psarc
+verify-psarc-mac: build
+	@test -n "$(PSARC_M)" || (echo "Usage: make verify-psarc-mac PSARC_M=/path/song_m.psarc"; exit 1)
+	@test -f "$(PSARC_M)" || (echo "missing $(PSARC_M)"; exit 1)
+	@mkdir -p "$(ROOT)/build/verify_out"
+	@base=$$(basename "$(PSARC_M)" .psarc); \
+	DEMUCS_MLX_PYTHON="$(PYTHON)" DEMUCS_MLX_CACHE="$(ROOT)/models" \
+		"$(BIN)" "$(PSARC_M)" --out "$(ROOT)/build/verify_out" --mp3 && \
+	test -f "$(ROOT)/build/verify_out/$$base/guitar.mp3" && \
+	echo "verify-psarc-mac OK ($$base)"
 
 models:
 	@mkdir -p "$(ROOT)/models"

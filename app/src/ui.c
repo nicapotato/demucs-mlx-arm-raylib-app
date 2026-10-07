@@ -359,7 +359,7 @@ void dmx_ui_draw(DmxApp *app, int screen_w, int screen_h) {
   const char *busy_hint = "File dialog open - finish or cancel in Finder";
 #endif
   const char *hint = busy ? busy_hint
-                          : (out_ok ? "Drop MP3 / WAV / OGG / FLAC / PSARC here - then press Start"
+                          : (out_ok ? "Drop MP3 / WAV / OGG / FLAC / PSARC (_p or _m) here - then press Start"
                                     : "Drop files here - pick output folder and press Start");
   int tw = MeasureText(hint, 18);
   DrawText(hint, (int)(L.drop.x + (L.drop.width - tw) / 2), (int)(L.drop.y + 30), 18,
